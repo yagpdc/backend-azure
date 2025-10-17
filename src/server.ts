@@ -4,7 +4,7 @@ const app = express();
 app.use(express.json());
 
 app.get("/", (_req, res) => {
-  res.send("OK");
+  res.send("Yago santana backend is running!");
 });
 
 const port = process.env.PORT || 3000;
