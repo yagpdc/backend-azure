@@ -1,13 +1,28 @@
 import "dotenv/config";
 import express from "express";
-import { getDb, closeDb } from "./mongo";
+import cors from "cors";
+import helmet from "helmet";
+import compression from "compression";
+import rateLimit from "express-rate-limit";
+import { z } from "zod";
+import { getDb } from "./mongo";
 
 const app = express();
+
+app.use(helmet());
+app.use(compression());
 app.use(express.json());
 
-app.get("/", (_req, res) => {
-  res.send("Yago santana backend is running!");
-});
+app.use(
+  cors({
+    origin: ["http://localhost:5173", "http://localhost:3000"],
+    credentials: false,
+  })
+);
+
+app.use(rateLimit({ windowMs: 60_000, max: 100 }));
+
+app.get("/", (_req, res) => res.send("Yago santana backend is running!"));
 
 app.get("/health/db", async (_req, res) => {
   try {
@@ -19,11 +34,20 @@ app.get("/health/db", async (_req, res) => {
   }
 });
 
+const createUserDto = z.object({
+  name: z.string().min(1),
+  email: z.string().email(),
+});
+
 app.post("/users", async (req, res) => {
+  const parse = createUserDto.safeParse(req.body);
+  if (!parse.success)
+    return res.status(400).json({ error: parse.error.flatten() });
+
   const db = await getDb();
+  await db.collection("users").createIndex({ email: 1 }, { unique: true });
   const result = await db.collection("users").insertOne({
-    name: req.body.name,
-    email: req.body.email,
+    ...parse.data,
     createdAt: new Date(),
   });
   res.status(201).json({ id: result.insertedId });
@@ -36,15 +60,6 @@ app.get("/users", async (_req, res) => {
 });
 
 const port = Number(process.env.PORT) || 3000;
-const server = app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
-});
-
-process.on("SIGINT", async () => {
-  await closeDb();
-  server.close(() => process.exit(0));
-});
-process.on("SIGTERM", async () => {
-  await closeDb();
-  server.close(() => process.exit(0));
-});
+app.listen(port, () =>
+  console.log(`Server running on http://localhost:${port}`)
+);
