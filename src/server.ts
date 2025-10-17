@@ -24,6 +24,8 @@ app.use(rateLimit({ windowMs: 60_000, max: 100 }));
 
 app.get("/", (_req, res) => res.send("Yago santana backend is running!"));
 
+app.get("/health", (_req, res) => res.json({ ok: true }));
+
 app.get("/health/db", async (_req, res) => {
   try {
     const db = await getDb();
