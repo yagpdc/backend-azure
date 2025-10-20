@@ -42,8 +42,8 @@ export class CardsService {
     return { success: true };
   }
 
-  // Criar deck do jogo (53 cartas total)
-  async createGameDeck() {
+  // Criar deck do jogo (total varia conforme pauseCards)
+  async createGameDeck(pauseCards: number = 3) {
     const deck: CreateCardDto[] = [];
     const colors: ("purple" | "red" | "blue" | "yellow" | "green")[] = [
       "purple",
@@ -53,7 +53,7 @@ export class CardsService {
       "green",
     ];
 
-    // 1. Cartas de nível (40 cartas: 8 números × 5 cores = 40)
+    // 1. Cartas de nível (40 cartas: 8 números × 5 cores = 40) - FIXO
     // Cada número (1-8) aparece uma vez em cada cor
     for (let numero = 1; numero <= 8; numero++) {
       for (const color of colors) {
@@ -61,15 +61,15 @@ export class CardsService {
       }
     }
 
-    // 2. Cartas de reset (10 cartas: 2 de cada cor)
+    // 2. Cartas de reset (10 cartas: 2 de cada cor) - FIXO
     for (const color of colors) {
       for (let i = 0; i < 2; i++) {
         deck.push({ numero: 0, tipo: CardTypes.RESET, color });
       }
     }
 
-    // 3. Cartas de pausa (3 cartas sem cor)
-    for (let i = 0; i < 3; i++) {
+    // 3. Cartas de pausa (quantidade variável: 0 a 3) - VARIÁVEL
+    for (let i = 0; i < pauseCards; i++) {
       deck.push({ numero: 0, tipo: CardTypes.PAUSE });
     }
 
@@ -88,9 +88,9 @@ export class CardsService {
       breakdown: {
         level: 40,
         reset: 10,
-        pause: 3,
+        pause: pauseCards,
       },
-      cards: cards.filter((card) => card !== null), // Retorna array de cartas completas
+      cards: cards.filter((card) => card !== null),
     };
   }
 

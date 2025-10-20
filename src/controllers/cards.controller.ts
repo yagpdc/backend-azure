@@ -71,10 +71,20 @@ export class CardsController {
     }
   };
 
-  // POST /cards/game/start - Criar deck do jogo (53 cartas)
-  startGame = async (_req: Request, res: Response) => {
+  // POST /cards/game/start - Criar deck do jogo
+  // Body opcional: { "pauseCards": 0-3 } (padrão: 3)
+  startGame = async (req: Request, res: Response) => {
     try {
-      const result = await service.createGameDeck();
+      const pauseCards =
+        req.body?.pauseCards !== undefined ? Number(req.body.pauseCards) : 3;
+
+      if (isNaN(pauseCards) || pauseCards < 0 || pauseCards > 3) {
+        return res.status(400).json({
+          error: "pauseCards deve ser um número entre 0 e 3",
+        });
+      }
+
+      const result = await service.createGameDeck(pauseCards);
       res.status(201).json(result);
     } catch (error: any) {
       res
