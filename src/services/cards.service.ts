@@ -106,15 +106,7 @@ export class CardsService {
 
   // Limpar todas as cartas do banco (útil para resetar o jogo)
   async clearAllCards() {
-    const cards = await this.repo.list({ limit: 1000 });
-    let deletedCount = 0;
-
-    for (const card of cards) {
-      if (card._id) {
-        await this.repo.delete(card._id);
-        deletedCount++;
-      }
-    }
+    const deletedCount = await this.repo.deleteAll();
 
     return {
       message: "Todas as cartas foram removidas",

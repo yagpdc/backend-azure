@@ -1,4 +1,5 @@
 import { z } from "zod";
+import mongoose, { Schema, Document } from "mongoose";
 
 // Tipos de carta válidos
 export const CardTypes = {
@@ -26,7 +27,7 @@ export const CreateCardDtoSchema = z.object({
       CardColors.YELLOW,
       CardColors.GREEN,
     ])
-    .optional(), 
+    .optional(),
 });
 
 export const UpdateCardDtoSchema = z.object({
@@ -46,12 +47,49 @@ export const UpdateCardDtoSchema = z.object({
 export type CreateCardDto = z.infer<typeof CreateCardDtoSchema>;
 export type UpdateCardDto = z.infer<typeof UpdateCardDtoSchema>;
 
-// Tipo do Card completo (com _id do MongoDB)
+// Interface do documento Mongoose
+export interface ICard extends Document {
+  numero: number;
+  tipo: (typeof CardTypes)[keyof typeof CardTypes];
+  color?: (typeof CardColors)[keyof typeof CardColors];
+  createdAt: Date;
+  updatedAt?: Date;
+}
+
+// Schema Mongoose
+const cardSchema = new Schema<ICard>(
+  {
+    numero: {
+      type: Number,
+      required: true,
+      min: 0,
+      max: 8,
+    },
+    tipo: {
+      type: String,
+      required: true,
+      enum: Object.values(CardTypes),
+    },
+    color: {
+      type: String,
+      enum: Object.values(CardColors),
+      required: false,
+    },
+  },
+  {
+    timestamps: true, // Adiciona createdAt e updatedAt automaticamente
+  }
+);
+
+// Model Mongoose
+export const CardModel = mongoose.model<ICard>("Card", cardSchema);
+
+// Tipo do Card completo (para respostas da API)
 export interface Card {
   _id?: string;
   numero: number;
   tipo: (typeof CardTypes)[keyof typeof CardTypes];
-  color?: (typeof CardColors)[keyof typeof CardColors]; // Opcional: só level e reset têm cor
+  color?: (typeof CardColors)[keyof typeof CardColors];
   createdAt: Date;
   updatedAt?: Date;
 }

@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { getDb } from "../mongo";
+import mongoose from "mongoose";
 
 export class HealthController {
   // Rota raiz do app
@@ -15,8 +15,17 @@ export class HealthController {
   // Health check do banco de dados
   healthDb = async (_req: Request, res: Response) => {
     try {
-      const db = await getDb();
-      await db.command({ ping: 1 });
+      // Verifica se está conectado ao MongoDB via Mongoose
+      if (mongoose.connection.readyState !== 1) {
+        return res.status(503).json({
+          ok: false,
+          error: "Database not connected",
+          state: mongoose.connection.readyState,
+        });
+      }
+
+      // Faz ping no banco
+      await mongoose.connection.db?.admin().ping();
       res.json({ ok: true });
     } catch (e: any) {
       res.status(500).json({ ok: false, error: e?.message });

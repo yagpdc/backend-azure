@@ -1,30 +1,30 @@
-import { MongoClient, Db, ServerApiVersion } from "mongodb";
+import mongoose from "mongoose";
 
 const uri = process.env.MONGODB_URI;
 if (!uri) throw new Error("Missing MONGODB_URI");
-const dbName = process.env.MONGODB_DB || "test";
 
-let client: MongoClient | null = null;
-let db: Db | null = null;
+let isConnected = false;
 
-export async function getDb(): Promise<Db> {
-  if (db) return db;
-  client = new MongoClient(uri!, {
-    serverApi: {
-      version: ServerApiVersion.v1,
-      strict: true,
-      deprecationErrors: true,
-    },
-  });
-  await client.connect();
-  db = client.db(dbName);
-  return db;
+export async function connectDb(): Promise<typeof mongoose> {
+  if (isConnected) {
+    return mongoose;
+  }
+
+  try {
+    await mongoose.connect(uri!);
+    isConnected = true;
+    console.log("✅ MongoDB conectado via Mongoose");
+    return mongoose;
+  } catch (error) {
+    console.error("❌ Erro ao conectar MongoDB:", error);
+    throw error;
+  }
 }
 
 export async function closeDb() {
-  if (client) {
-    await client.close();
-    client = null;
-    db = null;
+  if (isConnected) {
+    await mongoose.disconnect();
+    isConnected = false;
+    console.log("🔌 MongoDB desconectado");
   }
 }
