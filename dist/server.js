@@ -3,13 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const express_1 = __importDefault(require("express"));
-const app = (0, express_1.default)();
-app.use(express_1.default.json());
-app.get("/", (_req, res) => {
-    res.send("OK");
-});
-const port = process.env.PORT || 3000;
-app.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}`);
-});
+require("dotenv/config");
+const app_1 = __importDefault(require("./app"));
+const port = Number(process.env.PORT) || 3000;
+app_1.default.listen(port, () => console.log(`Server running on http://localhost:${port}`));

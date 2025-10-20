@@ -1,0 +1,1 @@
+Backend de teste para deploy no Azure Functions usando TypeScript e Express.js.
