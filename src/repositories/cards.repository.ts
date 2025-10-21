@@ -19,8 +19,8 @@ export class CardsRepository {
 
     return {
       _id: card._id.toString(),
-      numero: card.numero,
-      tipo: card.tipo,
+      number: card.number,
+      type: card.type,
       color: card.color,
       createdAt: card.createdAt,
       updatedAt: card.updatedAt,
@@ -32,8 +32,8 @@ export class CardsRepository {
 
     return cards.map((card) => ({
       _id: card._id.toString(),
-      numero: card.numero,
-      tipo: card.tipo,
+      number: card.number,
+      type: card.type,
       color: card.color,
       createdAt: card.createdAt,
       updatedAt: card.updatedAt,

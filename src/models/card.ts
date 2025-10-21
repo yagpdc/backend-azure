@@ -17,8 +17,8 @@ export const CardColors = {
 } as const;
 
 export const CreateCardDtoSchema = z.object({
-  numero: z.number().int().min(0).max(8), // 0 a 8 (0 para reset/pause)
-  tipo: z.enum([CardTypes.LEVEL, CardTypes.RESET, CardTypes.PAUSE]),
+  number: z.number().int().min(0).max(8), // 0 a 8 (0 para reset/pause)
+  type: z.enum([CardTypes.LEVEL, CardTypes.RESET, CardTypes.PAUSE]),
   color: z
     .enum([
       CardColors.PURPLE,
@@ -31,8 +31,8 @@ export const CreateCardDtoSchema = z.object({
 });
 
 export const UpdateCardDtoSchema = z.object({
-  numero: z.number().int().min(0).max(8).optional(),
-  tipo: z.enum([CardTypes.LEVEL, CardTypes.RESET, CardTypes.PAUSE]).optional(),
+  number: z.number().int().min(0).max(8).optional(),
+  type: z.enum([CardTypes.LEVEL, CardTypes.RESET, CardTypes.PAUSE]).optional(),
   color: z
     .enum([
       CardColors.PURPLE,
@@ -49,8 +49,8 @@ export type UpdateCardDto = z.infer<typeof UpdateCardDtoSchema>;
 
 // Interface do documento Mongoose
 export interface ICard extends Document {
-  numero: number;
-  tipo: (typeof CardTypes)[keyof typeof CardTypes];
+  number: number;
+  type: (typeof CardTypes)[keyof typeof CardTypes];
   color?: (typeof CardColors)[keyof typeof CardColors];
   createdAt: Date;
   updatedAt?: Date;
@@ -59,13 +59,13 @@ export interface ICard extends Document {
 // Schema Mongoose
 const cardSchema = new Schema<ICard>(
   {
-    numero: {
+    number: {
       type: Number,
       required: true,
       min: 0,
       max: 8,
     },
-    tipo: {
+    type: {
       type: String,
       required: true,
       enum: Object.values(CardTypes),
@@ -87,8 +87,8 @@ export const CardModel = mongoose.model<ICard>("Card", cardSchema);
 // Tipo do Card completo (para respostas da API)
 export interface Card {
   _id?: string;
-  numero: number;
-  tipo: (typeof CardTypes)[keyof typeof CardTypes];
+  number: number;
+  type: (typeof CardTypes)[keyof typeof CardTypes];
   color?: (typeof CardColors)[keyof typeof CardColors];
   createdAt: Date;
   updatedAt?: Date;

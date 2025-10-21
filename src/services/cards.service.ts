@@ -55,22 +55,22 @@ export class CardsService {
 
     // 1. Cartas de nível (40 cartas: 8 números × 5 cores = 40) - FIXO
     // Cada número (1-8) aparece uma vez em cada cor
-    for (let numero = 1; numero <= 8; numero++) {
+    for (let number = 1; number <= 8; number++) {
       for (const color of colors) {
-        deck.push({ numero, tipo: CardTypes.LEVEL, color });
+        deck.push({ number, type: CardTypes.LEVEL, color });
       }
     }
 
     // 2. Cartas de reset (10 cartas: 2 de cada cor) - FIXO
     for (const color of colors) {
       for (let i = 0; i < 2; i++) {
-        deck.push({ numero: 0, tipo: CardTypes.RESET, color });
+        deck.push({ number: 0, type: CardTypes.RESET, color });
       }
     }
 
     // 3. Cartas de pausa (quantidade variável: 0 a 3) - VARIÁVEL
     for (let i = 0; i < pauseCards; i++) {
-      deck.push({ numero: 0, tipo: CardTypes.PAUSE });
+      deck.push({ number: 0, type: CardTypes.PAUSE });
     }
 
     // Embaralhar o deck
