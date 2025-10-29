@@ -20,7 +20,7 @@ export class CardsRepository {
     return {
       _id: card._id.toString(),
       number: card.number,
-      type: card.type,
+      type: card.cardType,
       color: card.color,
       createdAt: card.createdAt,
       updatedAt: card.updatedAt,
@@ -33,7 +33,7 @@ export class CardsRepository {
     return cards.map((card) => ({
       _id: card._id.toString(),
       number: card.number,
-      type: card.type,
+      type: card.cardType,
       color: card.color,
       createdAt: card.createdAt,
       updatedAt: card.updatedAt,
@@ -55,7 +55,7 @@ export class CardsRepository {
     return result.deletedCount;
   }
 
-  async createDeck(cards: CreateCardDto[]) {
+  async createMany(cards: CreateCardDto[]) {
     const result = await CardModel.insertMany(cards);
     return result.map((card) => (card._id as Types.ObjectId).toString());
   }

@@ -1,14 +1,9 @@
 import { CardsRepository } from "../repositories/cards.repository";
-import type { CreateCardDto, UpdateCardDto } from "../models/card";
-import { CardTypes } from "../models/card";
+import type { CreateCardDto } from "../models/card";
+import { CardTypes, CardColors } from "../models/card";
 
 export class CardsService {
   private readonly repo = new CardsRepository();
-
-  // Criar um card
-  async create(dto: CreateCardDto) {
-    return this.repo.create(dto);
-  }
 
   // Buscar card por ID
   async findById(id: string) {
@@ -20,94 +15,65 @@ export class CardsService {
   }
 
   // Listar cards
-  async list({ limit = 50 }: { limit?: number } = {}) {
+  async list({ limit = 100 }: { limit?: number } = {}) {
     return this.repo.list({ limit });
   }
 
-  // Atualizar card
-  async update(id: string, dto: UpdateCardDto) {
-    const updated = await this.repo.update(id, dto);
-    if (!updated) {
-      throw new Error("Card não encontrado ou não modificado");
+  // Inicializar as 53 cartas fixas no banco (deve ser chamado apenas uma vez)
+  async initializeCards() {
+    // Verificar se já existem cartas
+    const existingCards = await this.repo.list({ limit: 1 });
+    if (existingCards.length > 0) {
+      return {
+        message: "Cards já foram inicializados",
+        totalCards: (await this.repo.list({ limit: 100 })).length,
+      };
     }
-    return { success: true };
-  }
 
-  // Deletar card
-  async delete(id: string) {
-    const deleted = await this.repo.delete(id);
-    if (!deleted) {
-      throw new Error("Card não encontrado");
-    }
-    return { success: true };
-  }
+    const cards: CreateCardDto[] = [];
+    const colors = Object.values(CardColors);
 
-  // Criar deck do jogo (total varia conforme pauseCards)
-  async createGameDeck(pauseCards: number = 3) {
-    const deck: CreateCardDto[] = [];
-    const colors: ("purple" | "red" | "blue" | "yellow" | "green")[] = [
-      "purple",
-      "red",
-      "blue",
-      "yellow",
-      "green",
-    ];
-
-    // 1. Cartas de nível (40 cartas: 8 números × 5 cores = 40) - FIXO
-    // Cada número (1-8) aparece uma vez em cada cor
+    // 1. Cartas de nível (40 cartas: 8 números × 5 cores = 40)
     for (let number = 1; number <= 8; number++) {
       for (const color of colors) {
-        deck.push({ number, type: CardTypes.LEVEL, color });
+        cards.push({ number, type: CardTypes.LEVEL as any, color });
       }
     }
 
-    // 2. Cartas de reset (10 cartas: 2 de cada cor) - FIXO
+    // 2. Cartas de reset (10 cartas: 2 de cada cor)
     for (const color of colors) {
       for (let i = 0; i < 2; i++) {
-        deck.push({ number: 0, type: CardTypes.RESET, color });
+        cards.push({ number: 0, type: CardTypes.RESET as any, color });
       }
     }
 
-    // 3. Cartas de pausa (quantidade variável: 0 a 3) - VARIÁVEL
-    for (let i = 0; i < pauseCards; i++) {
-      deck.push({ number: 0, type: CardTypes.PAUSE });
+    // 3. Cartas de pausa (3 cartas - máximo possível)
+    for (let i = 0; i < 3; i++) {
+      cards.push({ number: 0, type: CardTypes.PAUSE as any });
     }
 
-    // Embaralhar o deck
-    const shuffledDeck = this.shuffleDeck(deck);
-
-    // Salvar no banco e buscar as cartas completas
-    const ids = await this.repo.createDeck(shuffledDeck);
-
-    // Buscar todas as cartas criadas com seus dados completos
-    const cards = await Promise.all(ids.map((id) => this.repo.findById(id)));
+    // Salvar todas as cartas
+    const ids = await this.repo.createMany(cards);
 
     return {
-      message: "Deck do jogo criado com sucesso!",
-      totalCards: cards.length,
+      message: "Cards inicializados com sucesso!",
+      totalCards: ids.length,
       breakdown: {
         level: 40,
         reset: 10,
-        pause: pauseCards,
+        pause: 3,
       },
-      cards: cards.filter((card) => card !== null),
     };
   }
 
-  // Método auxiliar para embaralhar o deck (algoritmo Fisher-Yates)
-  private shuffleDeck(deck: CreateCardDto[]): CreateCardDto[] {
-    const shuffled = [...deck];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled;
+  // Obter todas as cartas (para criar decks)
+  async getAllCards() {
+    return this.repo.list({ limit: 100 });
   }
 
-  // Limpar todas as cartas do banco (útil para resetar o jogo)
+  // Limpar todas as cartas (cuidado! só usar em dev/reset)
   async clearAllCards() {
     const deletedCount = await this.repo.deleteAll();
-
     return {
       message: "Todas as cartas foram removidas",
       deletedCount,

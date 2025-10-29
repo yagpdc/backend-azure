@@ -50,7 +50,7 @@ export type UpdateCardDto = z.infer<typeof UpdateCardDtoSchema>;
 // Interface do documento Mongoose
 export interface ICard extends Document {
   number: number;
-  type: (typeof CardTypes)[keyof typeof CardTypes];
+  cardType: (typeof CardTypes)[keyof typeof CardTypes];
   color?: (typeof CardColors)[keyof typeof CardColors];
   createdAt: Date;
   updatedAt?: Date;
@@ -65,7 +65,7 @@ const cardSchema = new Schema<ICard>(
       min: 0,
       max: 8,
     },
-    type: {
+    cardType: {
       type: String,
       required: true,
       enum: Object.values(CardTypes),

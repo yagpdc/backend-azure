@@ -1,30 +1,25 @@
 import mongoose from "mongoose";
 
-const uri = process.env.MONGODB_URI;
-if (!uri) throw new Error("Missing MONGODB_URI");
+const uri = process.env.MONGODB_URI!;
+const dbName = process.env.MONGODB_DB || "backend-azure-dev";
 
 let isConnected = false;
 
 export async function connectDb(): Promise<typeof mongoose> {
-  if (isConnected) {
-    return mongoose;
-  }
+  if (isConnected) return mongoose;
+  await mongoose.connect(uri, { dbName });
+  console.log("DB:", mongoose.connection.name);
+  console.log("URI Host:", mongoose.connection.host);
 
-  try {
-    await mongoose.connect(uri!);
-    isConnected = true;
-    console.log("✅ MongoDB conectado via Mongoose");
-    return mongoose;
-  } catch (error) {
-    console.error("❌ Erro ao conectar MongoDB:", error);
-    throw error;
-  }
+  isConnected = true;
+  console.log("✅ MongoDB conectado via Mongoose");
+  console.log("DB:", mongoose.connection.name);
+  return mongoose;
 }
 
 export async function closeDb() {
-  if (isConnected) {
-    await mongoose.disconnect();
-    isConnected = false;
-    console.log("🔌 MongoDB desconectado");
-  }
+  if (!isConnected) return;
+  await mongoose.disconnect();
+  isConnected = false;
+  console.log("🔌 MongoDB desconectado");
 }
