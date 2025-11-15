@@ -18,9 +18,10 @@ app.use(
       "http://localhost:5173",
       "http://localhost:3000",
       "https://projeto-front-rho.vercel.app",
+      "https://words-game-five.vercel.app/",
     ],
     credentials: false,
-  })
+  }),
 );
 
 app.use(rateLimit({ windowMs: 60_000, max: 100 }));
