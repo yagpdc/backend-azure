@@ -5,6 +5,8 @@ import { connectDb, closeDb } from "../src/mongo";
 import { WordsBankEntryModel } from "../src/models/words-bank-entry";
 
 const DATA_DIR = path.resolve(__dirname, "..", "dados");
+const DICTIONARY_FILENAME = "words-five-letters.txt";
+const DICTIONARY_PATH = path.join(DATA_DIR, DICTIONARY_FILENAME);
 const FILE_HINTS = ["verbos", "lexico", "conjug"];
 const CHUNK_SIZE = 5000;
 
@@ -33,12 +35,12 @@ async function resolveWordFiles() {
   return FILE_HINTS.map((hint) => {
     const normalizedHint = hint.toLowerCase();
     const match = filenames.find((filename) =>
-      removeDiacritics(filename).toLowerCase().includes(normalizedHint)
+      removeDiacritics(filename).toLowerCase().includes(normalizedHint),
     );
 
     if (!match) {
       throw new Error(
-        `Arquivo contendo '${hint}' não foi encontrado em ${DATA_DIR}`
+        `Arquivo contendo '${hint}' não foi encontrado em ${DATA_DIR}`,
       );
     }
 
@@ -72,14 +74,21 @@ async function insertWords(words: string[]) {
     const chunk = words.slice(i, i + CHUNK_SIZE);
     await WordsBankEntryModel.insertMany(
       chunk.map((word) => ({ word, source: "import-script" })),
-      { ordered: false }
+      { ordered: false },
     );
     process.stdout.write(
-      `Inseridos ${Math.min(i + CHUNK_SIZE, words.length)} / ${words.length}\r`
+      `Inseridos ${Math.min(i + CHUNK_SIZE, words.length)} / ${words.length}\r`,
     );
   }
 
   process.stdout.write("\n");
+}
+
+async function writeDictionaryFile(words: string[]) {
+  await fs.writeFile(DICTIONARY_PATH, words.join("\n"), "utf8");
+  console.log(
+    `Arquivo ${DICTIONARY_FILENAME} atualizado com ${words.length} palavras.`,
+  );
 }
 
 async function main() {
@@ -87,7 +96,10 @@ async function main() {
   await connectDb();
 
   const files = await resolveWordFiles();
-  console.log("Arquivos encontrados:", files.map((file) => path.basename(file)));
+  console.log(
+    "Arquivos encontrados:",
+    files.map((file) => path.basename(file)),
+  );
 
   const words = await collectWords(files);
   console.log(`Total de palavras únicas (5 letras): ${words.length}`);
@@ -96,6 +108,7 @@ async function main() {
     throw new Error("Nenhuma palavra válida foi encontrada.");
   }
 
+  await writeDictionaryFile(words);
   await insertWords(words);
   console.log("Importação concluída.");
 }

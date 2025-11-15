@@ -16,6 +16,7 @@ O backend expõe um módulo independente para o jogo **Words** com autenticaçã
   O backend usa esses dois valores como credencial padrão; basta garantir que exista um documento `WordsUser` com `name = WORDS_ADMIN_USER`.
 - Para múltiplas contas, defina `WORDS_CREDENTIALS` no formato `conta:senha[:userId]`, separados por vírgulas. Quando `userId` não for informado, o backend procura o usuário pelo campo `name`.
 - Todas as rotas `/words` exigem HTTP Basic (`Authorization: Basic base64("conta:senha")`).
+- Os palpites enviados para `/words/puzzles/daily/guess` precisam existir no arquivo `dados/words-five-letters.txt`. Esse arquivo é gerado pelo `npm run words:import`; caso ele fique em outro diretório no deploy, defina `WORDS_DICTIONARY_PATH=/caminho/para/words-five-letters.txt`.
 
 ### Coleções principais
 
@@ -36,7 +37,7 @@ Todos exigem `Authorization: Basic ...`.
 | GET    | `/words/puzzles/daily?date=YYYY-MM-DD` | Retorna o identificador diário (sem revelar a palavra) dessa data ou do dia atual, incluindo o progresso salvo (tentativas já feitas, status, pontuação). |
 | GET    | `/words/puzzles`    | Lista puzzles paginados (`page`, `pageSize`). |
 | POST   | `/words/puzzles`    | Cria um puzzle `{ date, puzzleWord, maxAttempts?, metadata? }`. Datas são únicas. |
-| POST   | `/words/puzzles/daily/guess` | Processa a tentativa diária sem expor a palavra. Corpo: `{ guessWord, date?, dailyId? }`. Retorna o estado de cada letra (`absent`, `present`, `correct`), o número da tentativa, tentativas restantes e a pontuação recebida quando o usuário acertar. |
+| POST   | `/words/puzzles/daily/guess` | Processa a tentativa diária sem expor a palavra. Corpo: `{ guessWord, date?, dailyId? }`. Retorna o estado de cada letra (`absent`, `present`, `correct`), o número da tentativa, tentativas restantes e a pontuação; rejeita palavras fora do dicionário. |
 | GET    | `/words/infinite/random` | Retorna uma palavra aleatória da coleção `WordsBankEntry`. |
 | GET    | `/words/infinite/words` | Lista paginada das palavras do modo infinito (`page`, `pageSize` até 500). |
 
@@ -47,7 +48,8 @@ Todos exigem `Authorization: Basic ...`.
 3. Execute `npm run words:import` sempre que quiser atualizar o banco. O script:
    - lê todos os arquivos,
    - normaliza as palavras (remove acentos/caracteres especiais, filtra apenas termos com 5 letras, converte para CAIXA ALTA),
-   - substitui o conteúdo da coleção `WordsBankEntry`.
+   - substitui o conteúdo da coleção `WordsBankEntry`,
+   - cria/atualiza o arquivo `dados/words-five-letters.txt` com todas as palavras válidas.
 4. Após importar uma vez, o ambiente de produção não precisa mais da pasta `dados/`: o backend passa a servir tudo diretamente da coleção MongoDB.
 
 > O script usa as mesmas credenciais (`MONGODB_URI` e `MONGODB_DB`) configuradas no `.env`. Certifique-se de que o usuário tenha permissão de escrita.

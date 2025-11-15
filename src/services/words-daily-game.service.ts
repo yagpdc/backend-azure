@@ -5,6 +5,7 @@ import {
 } from "../models/words-user-puzzle";
 import { WordsPuzzlesService } from "./words-puzzles.service";
 import { WordsUsersService } from "./words-users.service";
+import { WordsDictionaryService } from "./words-dictionary.service";
 
 export type LetterState = "correct" | "present" | "absent";
 
@@ -85,6 +86,7 @@ export class WordsDailyGameService {
   constructor(
     private readonly puzzlesService = new WordsPuzzlesService(),
     private readonly usersService = new WordsUsersService(),
+    private readonly dictionaryService = new WordsDictionaryService(),
   ) {}
 
   async submitGuess({
@@ -103,6 +105,13 @@ export class WordsDailyGameService {
         `Guess must contain ${puzzle.puzzleWord.length} letters`,
         400,
       );
+    }
+
+    const isValidWord = await this.dictionaryService.isAllowed(normalizedGuess);
+    if (!isValidWord) {
+      throw new WordsDailyGameError("Guess word is not allowed", 400, {
+        guess: normalizedGuess,
+      });
     }
 
     let userPuzzle = await WordsUserPuzzleModel.findOne({
