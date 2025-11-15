@@ -4,6 +4,7 @@ import gamesRoutes from "./games.routes";
 import cardsRoutes from "./cards.routes";
 import decksRoutes from "./decks.routes";
 import { HealthController } from "../controllers/health.controller";
+import wordsRoutes from "./words.routes";
 
 const router = Router();
 import debug from "./debug";
@@ -18,5 +19,6 @@ router.use("/health", healthRoutes); // /health e /health/db
 router.use("/games", gamesRoutes);
 router.use("/cards", cardsRoutes); // /cards - Cartas fixas (53 cards)
 router.use("/decks", decksRoutes); // /decks - Decks de jogo (partidas)
+router.use("/words", wordsRoutes); // /words - Sistema Words (puzzles e histórico)
 
 export default router;

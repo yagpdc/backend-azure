@@ -17,7 +17,9 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "words:import": "tsx scripts/words-import.ts",
+    "words:seed-user": "tsx scripts/words-seed-user.ts"
   },
   "keywords": [],
   "author": "",
