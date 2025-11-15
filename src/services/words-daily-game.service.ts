@@ -170,12 +170,22 @@ export class WordsDailyGameService {
 
     let updatedUser: IWordsUser | null = null;
     let scoreAwarded = 0;
+    let shouldIncrementStreak = false;
+    let scoreIncrement = 0;
+
     if (newStatus === "won") {
       scoreAwarded = userPuzzle.score;
+      shouldIncrementStreak = true;
+      scoreIncrement = scoreAwarded;
+    } else if (newStatus === "lost") {
+      shouldIncrementStreak = true;
+    }
+
+    if (shouldIncrementStreak) {
       updatedUser =
         (await this.usersService.incrementStreak(user.id, {
           streakIncrement: 1,
-          scoreIncrement: scoreAwarded,
+          scoreIncrement,
         })) ?? user;
     }
 
