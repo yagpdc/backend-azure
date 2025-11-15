@@ -1,4 +1,5 @@
 import type { IWordsUser } from "../models/words-user";
+import type { IWordsPuzzle } from "../models/words-puzzle";
 import {
   WordsUserPuzzleModel,
   type IWordsUserPuzzle,
@@ -6,6 +7,7 @@ import {
 import { WordsPuzzlesService } from "./words-puzzles.service";
 import { WordsUsersService } from "./words-users.service";
 import { WordsDictionaryService } from "./words-dictionary.service";
+import { isTestWordsUser } from "../utils/words-test-user";
 
 export type LetterState = "correct" | "present" | "absent";
 
@@ -72,6 +74,24 @@ export interface SubmitDailyGuessResult {
   user: IWordsUser;
 }
 
+interface TestUserPuzzleSession {
+  userId: string;
+  puzzleId: string;
+  puzzleWord: string;
+  date: string;
+  status: IWordsUserPuzzle["status"];
+  attemptsUsed: number;
+  maxAttempts: number;
+  score: number;
+  guesses: {
+    attemptNumber: number;
+    guessWord: string;
+    pattern: string;
+    createdAt: Date;
+  }[];
+  finishedAt: Date | null;
+}
+
 export class WordsDailyGameError extends Error {
   constructor(
     message: string,
@@ -88,6 +108,8 @@ export class WordsDailyGameService {
     private readonly usersService = new WordsUsersService(),
     private readonly dictionaryService = new WordsDictionaryService(),
   ) {}
+
+  private readonly testSessions = new Map<string, TestUserPuzzleSession>();
 
   async submitGuess({
     user,
@@ -114,87 +136,88 @@ export class WordsDailyGameService {
       });
     }
 
-    let userPuzzle = await WordsUserPuzzleModel.findOne({
-      userId: user._id,
-      date: puzzle.date,
-    });
+    const isTestUser = isTestWordsUser(user);
+    const puzzleState = isTestUser
+      ? this.getOrCreateTestSession(user, puzzle)
+      : await this.getOrCreateUserPuzzle(user, puzzle);
 
-    if (!userPuzzle) {
-      userPuzzle = await WordsUserPuzzleModel.create({
-        userId: user._id,
-        puzzleId: puzzle._id,
-        puzzleWord: puzzle.puzzleWord,
-        date: puzzle.date,
-        status: "in_progress",
-        attemptsUsed: 0,
-        maxAttempts: puzzle.maxAttempts,
-        score: 0,
-        guesses: [],
-        finishedAt: null,
-      });
-    }
+    const attemptsUsed =
+      puzzleState.kind === "test"
+        ? puzzleState.session.attemptsUsed
+        : puzzleState.doc.attemptsUsed;
+    const maxAttempts =
+      puzzleState.kind === "test"
+        ? puzzleState.session.maxAttempts
+        : puzzleState.doc.maxAttempts;
 
-    if (userPuzzle.status === "won" || userPuzzle.status === "lost") {
-      throw new WordsDailyGameError(
-        `Daily puzzle already ${userPuzzle.status}`,
-        409,
-        {
-          status: userPuzzle.status,
-          finishedAt: userPuzzle.finishedAt
-            ? userPuzzle.finishedAt.toISOString()
-            : null,
-        },
-      );
-    }
-
-    if (userPuzzle.attemptsUsed >= userPuzzle.maxAttempts) {
+    if (attemptsUsed >= maxAttempts) {
       throw new WordsDailyGameError("Maximum attempts reached", 409, {
-        maxAttempts: userPuzzle.maxAttempts,
+        maxAttempts,
       });
     }
 
-    const attemptNumber = userPuzzle.attemptsUsed + 1;
+    const attemptNumber = attemptsUsed + 1;
     const evaluation = this.evaluateGuess(normalizedGuess, puzzle.puzzleWord);
 
-    userPuzzle.guesses.push({
+    const guessEntry = {
       attemptNumber,
       guessWord: normalizedGuess,
       pattern: evaluation.pattern,
       createdAt: new Date(),
-    });
-    userPuzzle.attemptsUsed = attemptNumber;
+    };
 
-    const newStatus = evaluation.isCorrect
-      ? "won"
-      : attemptNumber >= userPuzzle.maxAttempts
-        ? "lost"
-        : "in_progress";
+    let newStatus: IWordsUserPuzzle["status"];
+    if (puzzleState.kind === "test") {
+      puzzleState.session.guesses.push(guessEntry);
+      puzzleState.session.attemptsUsed = attemptNumber;
+      newStatus = evaluation.isCorrect
+        ? "won"
+        : attemptNumber >= puzzleState.session.maxAttempts
+          ? "lost"
+          : "in_progress";
+      puzzleState.session.status = newStatus;
+      puzzleState.session.finishedAt =
+        newStatus === "in_progress" ? null : new Date();
+      puzzleState.session.score =
+        newStatus === "won" ? this.computeScore(attemptNumber) : 0;
+    } else {
+      puzzleState.doc.guesses.push(guessEntry);
+      puzzleState.doc.attemptsUsed = attemptNumber;
+      newStatus = evaluation.isCorrect
+        ? "won"
+        : attemptNumber >= puzzleState.doc.maxAttempts
+          ? "lost"
+          : "in_progress";
 
-    userPuzzle.status = newStatus;
-    userPuzzle.finishedAt = newStatus === "in_progress" ? null : new Date();
-    userPuzzle.score =
-      newStatus === "won" ? this.computeScore(attemptNumber) : 0;
+      puzzleState.doc.status = newStatus;
+      puzzleState.doc.finishedAt =
+        newStatus === "in_progress" ? null : new Date();
+      puzzleState.doc.score =
+        newStatus === "won" ? this.computeScore(attemptNumber) : 0;
 
-    await userPuzzle.save();
+      await puzzleState.doc.save();
+    }
 
     let updatedUser: IWordsUser | null = null;
     let scoreAwarded = 0;
-    let shouldIncrementStreak = false;
-    let scoreIncrement = 0;
-
     if (newStatus === "won") {
-      scoreAwarded = userPuzzle.score;
-      shouldIncrementStreak = true;
-      scoreIncrement = scoreAwarded;
-    } else if (newStatus === "lost") {
-      shouldIncrementStreak = true;
-    }
+      scoreAwarded =
+        puzzleState.kind === "test"
+          ? puzzleState.session.score
+          : puzzleState.doc.score;
 
-    if (shouldIncrementStreak) {
+      if (!isTestUser) {
+        updatedUser =
+          (await this.usersService.incrementStreak(user.id, {
+            streakIncrement: 1,
+            scoreIncrement: scoreAwarded,
+          })) ?? user;
+      }
+    } else if (!isTestUser && newStatus === "lost") {
       updatedUser =
         (await this.usersService.incrementStreak(user.id, {
           streakIncrement: 1,
-          scoreIncrement,
+          scoreIncrement: 0,
         })) ?? user;
     }
 
@@ -208,12 +231,25 @@ export class WordsDailyGameService {
       attemptNumber,
       evaluation,
       status: newStatus,
-      attemptsUsed: userPuzzle.attemptsUsed,
-      remainingAttempts: Math.max(
-        0,
-        userPuzzle.maxAttempts - userPuzzle.attemptsUsed,
-      ),
-      finishedAt: userPuzzle.finishedAt ?? null,
+      attemptsUsed:
+        puzzleState.kind === "test"
+          ? puzzleState.session.attemptsUsed
+          : puzzleState.doc.attemptsUsed,
+      remainingAttempts:
+        puzzleState.kind === "test"
+          ? Math.max(
+              0,
+              puzzleState.session.maxAttempts -
+                puzzleState.session.attemptsUsed,
+            )
+          : Math.max(
+              0,
+              puzzleState.doc.maxAttempts - puzzleState.doc.attemptsUsed,
+            ),
+      finishedAt:
+        puzzleState.kind === "test"
+          ? (puzzleState.session.finishedAt ?? null)
+          : (puzzleState.doc.finishedAt ?? null),
       scoreAwarded,
       userScore: updatedUser?.score ?? user.score ?? 0,
       user: updatedUser ?? user,
@@ -278,6 +314,24 @@ export class WordsDailyGameService {
       throw new WordsDailyGameError("Daily puzzle not found for date", 404);
     }
 
+    const isTestUser = isTestWordsUser(user);
+    if (isTestUser) {
+      return {
+        puzzle: {
+          id: puzzle.id,
+          date: puzzle.date,
+          dailyId: this.getDailyId(puzzle.date),
+          maxAttempts: puzzle.maxAttempts,
+        },
+        status: "in_progress",
+        attemptsUsed: 0,
+        remainingAttempts: puzzle.maxAttempts,
+        finishedAt: null,
+        scoreAwarded: 0,
+        guesses: [],
+      };
+    }
+
     const userPuzzle = await WordsUserPuzzleModel.findOne({
       userId: user._id,
       date: puzzle.date,
@@ -310,6 +364,70 @@ export class WordsDailyGameService {
       scoreAwarded,
       guesses,
     };
+  }
+
+  private getOrCreateTestSession(user: IWordsUser, puzzle: IWordsPuzzle) {
+    const key = this.getTestSessionKey(user, puzzle.date);
+    const existing = this.testSessions.get(key);
+    if (existing && existing.status !== "in_progress") {
+      this.testSessions.delete(key);
+    }
+
+    let session = this.testSessions.get(key);
+    if (!session) {
+      session = {
+        userId: user.id,
+        puzzleId: puzzle.id,
+        puzzleWord: puzzle.puzzleWord,
+        date: puzzle.date,
+        status: "in_progress",
+        attemptsUsed: 0,
+        maxAttempts: puzzle.maxAttempts,
+        score: 0,
+        guesses: [],
+        finishedAt: null,
+      };
+      this.testSessions.set(key, session);
+    }
+
+    return { kind: "test" as const, session };
+  }
+
+  private getExistingTestSession(user: IWordsUser, date: string) {
+    return this.testSessions.get(this.getTestSessionKey(user, date)) ?? null;
+  }
+
+  private getTestSessionKey(user: IWordsUser, date: string) {
+    return `${user.id}:${date}`;
+  }
+
+  private async getOrCreateUserPuzzle(user: IWordsUser, puzzle: IWordsPuzzle) {
+    let doc = await WordsUserPuzzleModel.findOne({
+      userId: user._id,
+      date: puzzle.date,
+    });
+
+    if (!doc) {
+      doc = await WordsUserPuzzleModel.create({
+        userId: user._id,
+        puzzleId: puzzle._id,
+        puzzleWord: puzzle.puzzleWord,
+        date: puzzle.date,
+        status: "in_progress",
+        attemptsUsed: 0,
+        maxAttempts: puzzle.maxAttempts,
+        score: 0,
+        guesses: [],
+        finishedAt: null,
+      });
+    } else if (doc.status === "won" || doc.status === "lost") {
+      throw new WordsDailyGameError(`Daily puzzle already ${doc.status}`, 409, {
+        status: doc.status,
+        finishedAt: doc.finishedAt ? doc.finishedAt.toISOString() : null,
+      });
+    }
+
+    return { kind: "db" as const, doc };
   }
 
   private normalizeWord(value: string) {

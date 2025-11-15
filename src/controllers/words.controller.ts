@@ -13,6 +13,7 @@ import {
   WordsDailyGameService,
 } from "../services/words-daily-game.service";
 import { WordsUsersService } from "../services/words-users.service";
+import { isTestWordsUser } from "../utils/words-test-user";
 
 export class WordsController {
   private readonly puzzlesService = new WordsPuzzlesService();
@@ -42,6 +43,16 @@ export class WordsController {
         max: 100,
       });
 
+      if (isTestWordsUser(req.wordsUser)) {
+        return res.json({
+          page,
+          pageSize,
+          totalPages: 0,
+          totalItems: 0,
+          items: [],
+        });
+      }
+
       const history = await this.historyService.paginateHistory(userId(req), {
         page,
         pageSize,
@@ -59,6 +70,12 @@ export class WordsController {
     const validation = CreateWordsHistoryEntrySchema.safeParse(req.body);
     if (!validation.success) {
       return res.status(400).json({ error: validation.error.issues });
+    }
+
+    if (isTestWordsUser(req.wordsUser)) {
+      return res.status(403).json({
+        error: "History recording is disabled for the test account",
+      });
     }
 
     try {

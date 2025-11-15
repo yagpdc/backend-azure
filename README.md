@@ -17,6 +17,7 @@ O backend expõe um módulo independente para o jogo **Words** com autenticaçã
 - Para múltiplas contas, defina `WORDS_CREDENTIALS` no formato `conta:senha[:userId]`, separados por vírgulas. Quando `userId` não for informado, o backend procura o usuário pelo campo `name`.
 - Todas as rotas `/words` exigem HTTP Basic (`Authorization: Basic base64("conta:senha")`).
 - Os palpites enviados para `/words/puzzles/daily/guess` precisam existir no arquivo `dados/words-five-letters.txt`. Esse arquivo é gerado pelo `npm run words:import`; caso ele fique em outro diretório no deploy, defina `WORDS_DICTIONARY_PATH=/caminho/para/words-five-letters.txt`.
+- A conta configurada em `WORDS_TEST_USER` (padrão: `WORDS_ADMIN_USER`/`admin`) funciona como ambiente de testes: não acumula score/streak, não aparece no ranking e o modo diário não persiste histórico, permitindo jogar novamente quantas vezes quiser.
 
 ### Coleções principais
 

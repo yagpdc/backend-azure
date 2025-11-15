@@ -1,4 +1,5 @@
 import { WordsUserModel, type IWordsUser } from "../models/words-user";
+import { getTestUserName } from "../utils/words-test-user";
 
 const regexEscape = (value: string) =>
   value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -41,9 +42,12 @@ export class WordsUsersService {
   }
 
   listRanking() {
-    return WordsUserModel.find()
-      .sort({ score: -1, streak: -1, createdAt: 1 })
-      .select({ name: 1, score: 1, streak: 1 })
+    const testUserName = getTestUserName();
+    const filter = testUserName ? { name: { $ne: testUserName } } : {};
+
+    return WordsUserModel.find(filter)
+      .sort({ score: -1, updatedAt: 1, createdAt: 1 })
+      .select({ name: 1, score: 1, streak: 1, updatedAt: 1 })
       .lean();
   }
 }
