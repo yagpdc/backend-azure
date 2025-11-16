@@ -4,11 +4,10 @@ import { connectDb } from "./mongo";
 
 const port = Number(process.env.PORT) || 3000;
 
-// Conectar ao MongoDB antes de iniciar o servidor
 connectDb()
   .then(() => {
     app.listen(port, () =>
-      console.log(`🚀 Server running on http://localhost:${port}`)
+      console.log(`🚀 Server running on http://localhost:${port}`),
     );
   })
   .catch((error) => {
