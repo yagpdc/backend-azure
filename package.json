@@ -19,7 +19,8 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "words:import": "tsx scripts/words-import.ts",
-    "words:seed-user": "tsx scripts/words-seed-user.ts"
+    "words:seed-user": "tsx scripts/words-seed-user.ts",
+    "words:reset-progress": "tsx scripts/words-reset-progress.ts"
   },
   "keywords": [],
   "author": "",
