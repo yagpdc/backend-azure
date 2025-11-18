@@ -29,6 +29,13 @@ export class WordsHistoryService {
     }));
 
     const finishedAt = dto.finishedAt ? new Date(dto.finishedAt) : null;
+    const firstGuessAt = dto.firstGuessAt
+      ? new Date(dto.firstGuessAt)
+      : this.resolveFirstGuessTimestamp(guesses);
+    const timeSpentMs =
+      typeof dto.timeSpentMs === "number"
+        ? dto.timeSpentMs
+        : this.calculateTimeSpentMs(firstGuessAt, finishedAt);
 
     const entry = await WordsUserPuzzleModel.create({
       userId: user._id,
@@ -41,12 +48,18 @@ export class WordsHistoryService {
       score: dto.score ?? 0,
       guesses,
       finishedAt,
+      firstGuessAt,
+      timeSpentMs: timeSpentMs ?? null,
     });
+
+    const timeSpentIncrement =
+      dto.status === "won" && timeSpentMs !== null ? timeSpentMs : 0;
 
     const updatedUser =
       (await this.usersService.incrementStreak(user.id, {
         streakIncrement: 1,
         scoreIncrement: dto.score ?? 0,
+        timeSpentIncrement,
       })) ?? user;
 
     return {
@@ -97,6 +110,31 @@ export class WordsHistoryService {
       })),
       createdAt: doc.createdAt.toISOString(),
       finishedAt: doc.finishedAt ? doc.finishedAt.toISOString() : null,
+      firstGuessAt: doc.firstGuessAt ? doc.firstGuessAt.toISOString() : null,
+      timeSpentMs: doc.timeSpentMs ?? null,
     };
+  }
+
+  private resolveFirstGuessTimestamp(
+    guesses: IWordsUserPuzzle["guesses"],
+  ): Date | null {
+    if (guesses.length === 0) {
+      return null;
+    }
+    const first = guesses.reduce<Date | null>((earliest, current) => {
+      if (!earliest) {
+        return current.createdAt;
+      }
+      return current.createdAt < earliest ? current.createdAt : earliest;
+    }, null);
+    return first;
+  }
+
+  private calculateTimeSpentMs(first?: Date | null, finished?: Date | null) {
+    if (!first || !finished) {
+      return null;
+    }
+    const diff = finished.getTime() - first.getTime();
+    return diff >= 0 ? diff : 0;
   }
 }

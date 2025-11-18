@@ -33,14 +33,36 @@ Todos exigem `Authorization: Basic ...`.
 | Método | Rota                | Descrição |
 | ------ | ------------------- | --------- |
 | GET    | `/words/profile`    | Retorna nome, streak, score e config do usuário autenticado. |
+| PUT    | `/words/profile/avatar` | Atualiza o avatar salvo para o usuário autenticado. Recebe `frogType`, `hat`, `body` e `background` como `string` ou `null` e simplesmente persiste os valores enviados (o front pode aplicar defaults quando recebe `null`). |
 | GET    | `/words/history`    | Histórico paginado. Query params: `page` (default 1) e `pageSize` (default 10, máx. 100). |
 | POST   | `/words/history`    | Cria um novo registro de jogo (incrementa o streak). Corpo: `puzzleId`, `status`, `attemptsUsed`, `maxAttempts?`, `score?`, `finishedAt?`, `guesses[]` com `{ attemptNumber, guessWord, pattern, createdAt }`. |
 | GET    | `/words/puzzles/daily?date=YYYY-MM-DD` | Retorna o identificador diário (sem revelar a palavra) dessa data ou do dia atual, incluindo o progresso salvo (tentativas já feitas, status, pontuação). |
 | GET    | `/words/puzzles`    | Lista puzzles paginados (`page`, `pageSize`). |
 | POST   | `/words/puzzles`    | Cria um puzzle `{ date, puzzleWord, maxAttempts?, metadata? }`. Datas são únicas. |
 | POST   | `/words/puzzles/daily/guess` | Processa a tentativa diária sem expor a palavra. Corpo: `{ guessWord, date?, dailyId? }`. Retorna o estado de cada letra (`absent`, `present`, `correct`), o número da tentativa, tentativas restantes e a pontuação; rejeita palavras fora do dicionário. |
+| GET    | `/words/ranking` | Lista o ranking ordenado por `score` e, em empates, pelo tempo total gasto (em ms) entre a primeira tentativa e o término de cada daily (`totalTimeSpentMs`). |
+| GET    | `/words/avatar/options` | Retorna o catálogo `frogs`, `hats`, `bodies` e `backgrounds` disponíveis para o avatar, permitindo que o front sincronize a lista sem redeploy. |
 | GET    | `/words/infinite/random` | Retorna uma palavra aleatória da coleção `WordsBankEntry`. |
 | GET    | `/words/infinite/words` | Lista paginada das palavras do modo infinito (`page`, `pageSize` até 500). |
+
+O campo `config.avatar` segue o formato:
+
+```json
+{
+  "config": {
+    "avatar": {
+      "frogType": "frogo",
+      "hat": "hat_02",
+      "body": "body_01",
+      "background": "ocean"
+    }
+  }
+}
+```
+
+Quando o usuário ainda não salvou um avatar, o backend retorna o `frogType` default e deixa os demais campos como `null`.
+
+> Observação: o backend aceita qualquer string (ou `null`) para `frogType`, `hat`, `body` e `background`. O endpoint `/words/avatar/options` serve apenas como catálogo sugerido para o front sincronizar os ids conhecidos.
 
 ### Usuários e modo infinito: importação e manutenção
 
@@ -84,7 +106,9 @@ Todos exigem `Authorization: Basic ...`.
         }
       ],
       "createdAt": "2025-11-13T11:59:50.000Z",
-      "finishedAt": "2025-11-13T12:01:00.000Z"
+      "finishedAt": "2025-11-13T12:01:00.000Z",
+      "firstGuessAt": "2025-11-13T12:00:05.000Z",
+      "timeSpentMs": 55000
     }
   ]
 }

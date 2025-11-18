@@ -5,6 +5,7 @@ import {
 } from "../models/words-puzzle";
 import { CreateWordsHistoryEntrySchema } from "../models/words-user-puzzle";
 import { SubmitDailyGuessSchema } from "../models/words-daily-guess";
+import { UpdateWordsAvatarSchema } from "../models/words-avatar";
 import { WordsPuzzlesService } from "../services/words-puzzles.service";
 import { WordsHistoryService } from "../services/words-history.service";
 import { WordsBankService } from "../services/words-bank.service";
@@ -14,6 +15,12 @@ import {
 } from "../services/words-daily-game.service";
 import { WordsUsersService } from "../services/words-users.service";
 import { isTestWordsUser } from "../utils/words-test-user";
+import {
+  getWordsAvatarOptions,
+  normalizeAvatarConfig,
+  normalizeAvatarPayload,
+} from "../utils/words-avatar";
+import type { IWordsUser } from "../models/words-user";
 
 export class WordsController {
   private readonly puzzlesService = new WordsPuzzlesService();
@@ -24,15 +31,34 @@ export class WordsController {
 
   getProfile = (req: Request, res: Response) => {
     const user = req.wordsUser!;
-    return res.json({
-      id: user.id,
-      name: user.name,
-      streak: user.streak,
-      score: user.score ?? 0,
-      config: user.config ?? {},
-      createdAt: user.createdAt.toISOString(),
-      updatedAt: user.updatedAt.toISOString(),
-    });
+    return res.json(this.mapProfile(user));
+  };
+
+  updateAvatar = async (req: Request, res: Response) => {
+    const validation = UpdateWordsAvatarSchema.safeParse(req.body);
+    if (!validation.success) {
+      return res.status(400).json({ error: validation.error.issues });
+    }
+
+    try {
+      const avatar = normalizeAvatarPayload({
+        frogType: validation.data.frogType,
+        hat: validation.data.hat ?? null,
+        body: validation.data.body ?? null,
+        background: validation.data.background ?? null,
+      });
+
+      const updatedUser =
+        (await this.usersService.updateAvatar(userId(req), avatar)) ?? null;
+      if (!updatedUser) {
+        return res.status(404).json({ error: "Words user not found" });
+      }
+
+      req.wordsUser = updatedUser;
+      return res.json(this.mapProfile(updatedUser));
+    } catch (error: any) {
+      return res.status(500).json({ error: error.message });
+    }
   };
 
   getHistory = async (req: Request, res: Response) => {
@@ -268,12 +294,44 @@ export class WordsController {
           name: player.name,
           streak: player.streak ?? 0,
           score: player.score ?? 0,
+          totalTimeSpentMs: player.totalTimeSpentMs ?? 0,
         })),
       );
     } catch (error: any) {
       return res.status(500).json({ error: error.message });
     }
   };
+
+  listAvatarOptions = (_req: Request, res: Response) => {
+    return res.json(getWordsAvatarOptions());
+  };
+
+  private mapProfile(user: IWordsUser) {
+    return {
+      id: user.id,
+      name: user.name,
+      streak: user.streak,
+      score: user.score ?? 0,
+      config: this.buildUserConfig(user),
+      createdAt: user.createdAt.toISOString(),
+      updatedAt: user.updatedAt.toISOString(),
+    };
+  }
+
+  private buildUserConfig(user: IWordsUser) {
+    const baseConfig: Record<string, unknown> =
+      user.config && typeof user.config === "object"
+        ? { ...(user.config as Record<string, unknown>) }
+        : {};
+
+    const avatarValue =
+      (baseConfig as { avatar?: unknown }).avatar ?? undefined;
+
+    return {
+      ...baseConfig,
+      avatar: normalizeAvatarConfig(avatarValue),
+    };
+  }
 }
 
 function userId(req: Request) {

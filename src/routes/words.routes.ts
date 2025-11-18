@@ -8,8 +8,10 @@ const controller = new WordsController();
 router.use(wordsAuth);
 
 router.get("/profile", controller.getProfile);
+router.put("/profile/avatar", controller.updateAvatar);
 router.get("/history", controller.getHistory);
 router.post("/history", controller.createHistoryEntry);
+router.get("/avatar/options", controller.listAvatarOptions);
 
 router.get("/puzzles/daily", controller.getDailyPuzzle);
 router.post("/puzzles/daily/guess", controller.submitDailyGuess);

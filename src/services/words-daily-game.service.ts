@@ -90,6 +90,8 @@ interface TestUserPuzzleSession {
     createdAt: Date;
   }[];
   finishedAt: Date | null;
+  firstGuessAt: Date | null;
+  timeSpentMs: number | null;
 }
 
 export class WordsDailyGameError extends Error {
@@ -168,6 +170,9 @@ export class WordsDailyGameService {
 
     let newStatus: IWordsUserPuzzle["status"];
     if (puzzleState.kind === "test") {
+      if (!puzzleState.session.firstGuessAt) {
+        puzzleState.session.firstGuessAt = guessEntry.createdAt;
+      }
       puzzleState.session.guesses.push(guessEntry);
       puzzleState.session.attemptsUsed = attemptNumber;
       newStatus = evaluation.isCorrect
@@ -178,9 +183,19 @@ export class WordsDailyGameService {
       puzzleState.session.status = newStatus;
       puzzleState.session.finishedAt =
         newStatus === "in_progress" ? null : new Date();
+      puzzleState.session.timeSpentMs =
+        newStatus === "in_progress"
+          ? null
+          : this.calculateTimeSpentMs(
+              puzzleState.session.firstGuessAt,
+              puzzleState.session.finishedAt,
+            );
       puzzleState.session.score =
         newStatus === "won" ? this.computeScore(attemptNumber) : 0;
     } else {
+      if (!puzzleState.doc.firstGuessAt) {
+        puzzleState.doc.firstGuessAt = guessEntry.createdAt;
+      }
       puzzleState.doc.guesses.push(guessEntry);
       puzzleState.doc.attemptsUsed = attemptNumber;
       newStatus = evaluation.isCorrect
@@ -192,6 +207,13 @@ export class WordsDailyGameService {
       puzzleState.doc.status = newStatus;
       puzzleState.doc.finishedAt =
         newStatus === "in_progress" ? null : new Date();
+      puzzleState.doc.timeSpentMs =
+        newStatus === "in_progress"
+          ? null
+          : this.calculateTimeSpentMs(
+              puzzleState.doc.firstGuessAt,
+              puzzleState.doc.finishedAt,
+            );
       puzzleState.doc.score =
         newStatus === "won" ? this.computeScore(attemptNumber) : 0;
 
@@ -207,10 +229,13 @@ export class WordsDailyGameService {
           : puzzleState.doc.score;
 
       if (!isTestUser) {
+        const timeSpentIncrement =
+          puzzleState.kind === "test" ? 0 : (puzzleState.doc.timeSpentMs ?? 0);
         updatedUser =
           (await this.usersService.incrementStreak(user.id, {
             streakIncrement: 1,
             scoreIncrement: scoreAwarded,
+            timeSpentIncrement,
           })) ?? user;
       }
     } else if (!isTestUser && newStatus === "lost") {
@@ -386,6 +411,8 @@ export class WordsDailyGameService {
         score: 0,
         guesses: [],
         finishedAt: null,
+        firstGuessAt: null,
+        timeSpentMs: null,
       };
       this.testSessions.set(key, session);
     }
@@ -419,6 +446,8 @@ export class WordsDailyGameService {
         score: 0,
         guesses: [],
         finishedAt: null,
+        firstGuessAt: null,
+        timeSpentMs: null,
       });
     } else if (doc.status === "won" || doc.status === "lost") {
       throw new WordsDailyGameError(`Daily puzzle already ${doc.status}`, 409, {
@@ -441,6 +470,14 @@ export class WordsDailyGameService {
   private computeScore(attemptNumber: number) {
     const attemptScores = [10, 8, 6, 4, 3, 2];
     return attemptScores[attemptNumber - 1] ?? 0;
+  }
+
+  private calculateTimeSpentMs(first?: Date | null, finished?: Date | null) {
+    if (!first || !finished) {
+      return null;
+    }
+    const diff = finished.getTime() - first.getTime();
+    return diff >= 0 ? diff : 0;
   }
 
   private patternToLetters(

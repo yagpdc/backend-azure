@@ -16,6 +16,8 @@ export const CreateWordsHistoryEntrySchema = z.object({
   score: z.number().int().min(0).default(0),
   guesses: z.array(WordsGuessSchema).default([]),
   finishedAt: z.string().datetime().nullable().optional(),
+  firstGuessAt: z.string().datetime().nullable().optional(),
+  timeSpentMs: z.number().int().min(0).optional(),
 });
 
 export type CreateWordsHistoryEntryDto = z.infer<
@@ -39,6 +41,8 @@ export interface IWordsUserPuzzle extends Document {
   maxAttempts: number;
   score: number;
   guesses: IWordsGuess[];
+  firstGuessAt?: Date | null;
+  timeSpentMs?: number | null;
   createdAt: Date;
   updatedAt: Date;
   finishedAt?: Date | null;
@@ -51,7 +55,7 @@ const guessSchema = new Schema<IWordsGuess>(
     pattern: { type: String, required: true },
     createdAt: { type: Date, required: true, default: Date.now },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const wordsUserPuzzleSchema = new Schema<IWordsUserPuzzle>(
@@ -79,15 +83,17 @@ const wordsUserPuzzleSchema = new Schema<IWordsUserPuzzle>(
     score: { type: Number, required: true, default: 0 },
     guesses: { type: [guessSchema], default: [] },
     finishedAt: { type: Date, default: null },
+    firstGuessAt: { type: Date, default: null },
+    timeSpentMs: { type: Number, default: null },
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 wordsUserPuzzleSchema.index({ userId: 1, date: -1 });
 
 export const WordsUserPuzzleModel = mongoose.model<IWordsUserPuzzle>(
   "WordsUserPuzzle",
-  wordsUserPuzzleSchema
+  wordsUserPuzzleSchema,
 );

@@ -19,6 +19,7 @@ export interface IWordsUser extends Document {
   name: string;
   streak: number;
   score: number;
+  totalTimeSpentMs: number;
   config: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
@@ -29,6 +30,7 @@ const wordsUserSchema = new Schema<IWordsUser>(
     name: { type: String, required: true, trim: true },
     streak: { type: Number, required: true, default: 0 },
     score: { type: Number, required: true, default: 0 },
+    totalTimeSpentMs: { type: Number, required: true, default: 0 },
     config: { type: Schema.Types.Mixed, default: {} },
   },
   {
