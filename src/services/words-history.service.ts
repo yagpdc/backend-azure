@@ -13,6 +13,15 @@ interface PaginateHistoryParams {
   pageSize?: number;
 }
 
+export class WordsHistoryError extends Error {
+  constructor(
+    message: string,
+    public readonly statusCode: number,
+  ) {
+    super(message);
+  }
+}
+
 export class WordsHistoryService {
   constructor(private readonly usersService = new WordsUsersService()) {}
 
@@ -21,12 +30,78 @@ export class WordsHistoryService {
     puzzle: IWordsPuzzle,
     dto: CreateWordsHistoryEntryDto,
   ) {
+    if (this.isPastPuzzle(puzzle.date)) {
+      throw new WordsHistoryError(
+        "Past puzzles cannot be updated through this endpoint",
+        400,
+      );
+    }
+
+    const existingEntry = await WordsUserPuzzleModel.findOne({
+      userId: user._id,
+      puzzleId: puzzle._id,
+    });
+    if (existingEntry) {
+      throw new WordsHistoryError(
+        "History already registered for this puzzle",
+        409,
+      );
+    }
+
+    const maxAttempts = dto.maxAttempts ?? puzzle.maxAttempts;
+    if (maxAttempts !== puzzle.maxAttempts) {
+      throw new WordsHistoryError(
+        "maxAttempts does not match the puzzle configuration",
+        400,
+      );
+    }
+
+    if (dto.attemptsUsed < 0 || dto.attemptsUsed > maxAttempts) {
+      throw new WordsHistoryError("Invalid attemptsUsed value", 400);
+    }
+
+    const normalizedPuzzleWord = puzzle.puzzleWord.toUpperCase();
     const guesses = (dto.guesses ?? []).map((guess) => ({
       attemptNumber: guess.attemptNumber,
       guessWord: guess.guessWord.toUpperCase(),
       pattern: guess.pattern,
       createdAt: guess.createdAt ? new Date(guess.createdAt) : new Date(),
     }));
+
+    if (guesses.length !== dto.attemptsUsed) {
+      throw new WordsHistoryError(
+        "attemptsUsed must match the amount of guesses provided",
+        400,
+      );
+    }
+
+    guesses.forEach((guess, index) => {
+      if (guess.attemptNumber !== index + 1) {
+        throw new WordsHistoryError("Invalid guess attempt numbering", 400);
+      }
+      if (guess.guessWord.length !== normalizedPuzzleWord.length) {
+        throw new WordsHistoryError(
+          "Guess length does not match puzzle word",
+          400,
+        );
+      }
+    });
+
+    if (dto.status === "won") {
+      if (guesses.length === 0) {
+        throw new WordsHistoryError(
+          "Winning entries must include at least one guess",
+          400,
+        );
+      }
+      const lastGuess = guesses[guesses.length - 1];
+      if (lastGuess.guessWord !== normalizedPuzzleWord) {
+        throw new WordsHistoryError(
+          "Winning entries must end with the puzzle word",
+          400,
+        );
+      }
+    }
 
     const finishedAt = dto.finishedAt ? new Date(dto.finishedAt) : null;
     const firstGuessAt = dto.firstGuessAt
@@ -37,6 +112,9 @@ export class WordsHistoryService {
         ? dto.timeSpentMs
         : this.calculateTimeSpentMs(firstGuessAt, finishedAt);
 
+    const scoreEarned =
+      dto.status === "won" ? this.computeScore(dto.attemptsUsed) : 0;
+
     const entry = await WordsUserPuzzleModel.create({
       userId: user._id,
       puzzleId: puzzle._id,
@@ -44,8 +122,8 @@ export class WordsHistoryService {
       date: puzzle.date,
       status: dto.status,
       attemptsUsed: dto.attemptsUsed,
-      maxAttempts: dto.maxAttempts ?? puzzle.maxAttempts,
-      score: dto.score ?? 0,
+      maxAttempts,
+      score: scoreEarned,
       guesses,
       finishedAt,
       firstGuessAt,
@@ -58,7 +136,7 @@ export class WordsHistoryService {
     const updatedUser =
       (await this.usersService.incrementStreak(user.id, {
         streakIncrement: 1,
-        scoreIncrement: dto.score ?? 0,
+        scoreIncrement: scoreEarned,
         timeSpentIncrement,
       })) ?? user;
 
@@ -136,5 +214,31 @@ export class WordsHistoryService {
     }
     const diff = finished.getTime() - first.getTime();
     return diff >= 0 ? diff : 0;
+  }
+
+  private computeScore(attemptNumber: number) {
+    const attemptScores = [10, 8, 6, 4, 3, 2];
+    if (attemptNumber <= 0) {
+      return 0;
+    }
+    return attemptScores[attemptNumber - 1] ?? 0;
+  }
+
+  private isPastPuzzle(puzzleDate: string) {
+    const puzzleDay = this.normalizeDate(puzzleDate);
+    const today = this.normalizeDate(new Date().toISOString());
+    if (!puzzleDay || !today) {
+      return false;
+    }
+    return puzzleDay.getTime() < today.getTime();
+  }
+
+  private normalizeDate(value: string) {
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return null;
+    }
+    parsed.setUTCHours(0, 0, 0, 0);
+    return parsed;
   }
 }

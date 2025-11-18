@@ -13,7 +13,7 @@ export const CreateWordsHistoryEntrySchema = z.object({
   status: z.enum(["won", "lost", "abandoned", "in_progress"]),
   attemptsUsed: z.number().int().min(0),
   maxAttempts: z.number().int().min(1).max(10).optional(),
-  score: z.number().int().min(0).default(0),
+  score: z.number().int().min(0).optional(),
   guesses: z.array(WordsGuessSchema).default([]),
   finishedAt: z.string().datetime().nullable().optional(),
   firstGuessAt: z.string().datetime().nullable().optional(),

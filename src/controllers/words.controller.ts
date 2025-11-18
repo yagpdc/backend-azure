@@ -7,7 +7,10 @@ import { CreateWordsHistoryEntrySchema } from "../models/words-user-puzzle";
 import { SubmitDailyGuessSchema } from "../models/words-daily-guess";
 import { UpdateWordsAvatarSchema } from "../models/words-avatar";
 import { WordsPuzzlesService } from "../services/words-puzzles.service";
-import { WordsHistoryService } from "../services/words-history.service";
+import {
+  WordsHistoryService,
+  WordsHistoryError,
+} from "../services/words-history.service";
 import { WordsBankService } from "../services/words-bank.service";
 import {
   WordsDailyGameError,
@@ -129,6 +132,9 @@ export class WordsController {
         historyItem: result.historyItem,
       });
     } catch (error: any) {
+      if (error instanceof WordsHistoryError) {
+        return res.status(error.statusCode).json({ error: error.message });
+      }
       return res.status(500).json({ error: error.message });
     }
   };
