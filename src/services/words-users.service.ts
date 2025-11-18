@@ -62,6 +62,7 @@ export class WordsUsersService {
         streak: 1,
         updatedAt: 1,
         totalTimeSpentMs: 1,
+        config: 1,
       })
       .lean();
   }

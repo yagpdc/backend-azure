@@ -295,6 +295,9 @@ export class WordsController {
           streak: player.streak ?? 0,
           score: player.score ?? 0,
           totalTimeSpentMs: player.totalTimeSpentMs ?? 0,
+          avatar: this.resolveAvatarFromConfig(
+            player.config as Record<string, unknown> | undefined,
+          ),
         })),
       );
     } catch (error: any) {
@@ -319,18 +322,31 @@ export class WordsController {
   }
 
   private buildUserConfig(user: IWordsUser) {
-    const baseConfig: Record<string, unknown> =
-      user.config && typeof user.config === "object"
-        ? { ...(user.config as Record<string, unknown>) }
-        : {};
-
-    const avatarValue =
-      (baseConfig as { avatar?: unknown }).avatar ?? undefined;
+    const baseConfig = this.normalizeUserConfig(user.config);
 
     return {
       ...baseConfig,
-      avatar: normalizeAvatarConfig(avatarValue),
+      avatar: this.resolveAvatarFromConfig(baseConfig),
     };
+  }
+
+  private normalizeUserConfig(
+    config: IWordsUser["config"],
+  ): Record<string, unknown> {
+    if (config && typeof config === "object") {
+      return { ...(config as Record<string, unknown>) };
+    }
+    return {};
+  }
+
+  private resolveAvatarFromConfig(
+    config?: Record<string, unknown>,
+  ): ReturnType<typeof normalizeAvatarConfig> {
+    const avatarValue =
+      config && typeof config === "object"
+        ? (config as { avatar?: unknown }).avatar
+        : undefined;
+    return normalizeAvatarConfig(avatarValue);
   }
 }
 
