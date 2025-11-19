@@ -10,7 +10,7 @@ import { WordsUsersService } from "./words-users.service";
 import { WordsDictionaryService } from "./words-dictionary.service";
 import { evaluateWordGuess } from "../utils/words-guess-evaluator";
 
-const MAX_ATTEMPTS = 4;
+const MAX_ATTEMPTS = 5;
 const DEFAULT_INFINITE_DICTIONARY_PATH = path.resolve(
   __dirname,
   "..",

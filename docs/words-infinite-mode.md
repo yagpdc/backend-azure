@@ -1,9 +1,9 @@
 # Words – Infinite Mode (Run) Design
 
 ## Objetivo
-Implementar um modo infinito em que o jogador enfrenta uma sequência (“run”) de palavras aleatórias com as seguintes regras:
+Implementar um modo infinito em que o jogador enfrenta uma sequência ("run") de palavras aleatórias com as seguintes regras:
 
-- Máximo de **4 tentativas** por palavra.
+- Máximo de **5 tentativas** por palavra.
 - Cada acerto soma pontos na run atual; ao errar, a run termina, o score volta para zero e o recorde é atualizado.
 - Nenhuma palavra se repete dentro da mesma run; se todas forem usadas, o modo termina.
 - Ao perder, o backend devolve o histórico completo da run (palavra, tentativas, resultado) para que o front exiba a tela de *Game Over*.
@@ -26,7 +26,7 @@ Representa uma run ativa ou finalizada.
 | `usedWords` | `[String]` | Palavras já usadas na run para evitar repetição. |
 | `history` | Array | Cada item contém `{ word, result: "won"|"lost", attemptsUsed, guesses[] }`. |
 | `nextWord` | String | Palavra que o usuário precisa adivinhar agora. |
-| `attemptsUsed` | Number | Tentativas já gastas na palavra atual (0–4). |
+| `attemptsUsed` | Number | Tentativas já gastas na palavra atual (0–5). |
 | `createdAt/updatedAt` | Date | Timestamps. |
 
 ### 2. `WordsUser` (campos novos)
@@ -58,7 +58,7 @@ Fluxo:
      - Incrementa `currentScore` e `WordsUser.infiniteCurrentScore`.
      - Atualiza `infiniteRecord` se necessário.
      - Sorteia nova palavra entre `remainingWords` (remove da lista, move para `usedWords`). Se não houver mais palavras, marca run como `completed`.
-   - Se errar e atingir 4 tentativas:
+   - Se errar e atingir 5 tentativas:
      - Registra no `history` com `result = "lost"`.
      - Marca run como `failed`, zera `infiniteCurrentScore` e mantém `infiniteRecord`.
      - Retorna payload de *Game Over* com o histórico.
@@ -86,7 +86,7 @@ Todos os métodos usam `WordsDictionaryService` para validar palpites.
   "record": 10,
   "remainingWords": 2186,
   "attemptsUsed": 2,
-  "maxAttempts": 4,
+  "maxAttempts": 5,
   "nextWord": {
     "length": 5,
     "letters": ["", "", "", "", ""]

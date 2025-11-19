@@ -62,7 +62,7 @@ const wordsInfiniteRunSchema = new Schema<IWordsInfiniteRun>(
       default: "active",
     },
     currentScore: { type: Number, required: true, default: 0 },
-    maxAttempts: { type: Number, required: true, default: 4 },
+    maxAttempts: { type: Number, required: true, default: 5 },
     attemptsUsed: { type: Number, required: true, default: 0 },
     nextWord: { type: String, default: null },
     usedWords: { type: [String], default: [] },
