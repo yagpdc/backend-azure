@@ -19,6 +19,10 @@ router.get("/puzzles", controller.listPuzzles);
 router.post("/puzzles", controller.createPuzzle);
 router.get("/infinite/random", controller.getInfiniteRandomWord);
 router.get("/infinite/words", controller.listInfiniteWords);
+router.post("/infinite/run", controller.startInfiniteRun);
+router.get("/infinite/run", controller.getInfiniteRunStatus);
+router.post("/infinite/run/guess", controller.submitInfiniteGuess);
+router.post("/infinite/run/abandon", controller.abandonInfiniteRun);
 router.get("/ranking", controller.getRanking);
 
 export default router;

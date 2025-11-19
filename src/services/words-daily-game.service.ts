@@ -8,19 +8,12 @@ import { WordsPuzzlesService } from "./words-puzzles.service";
 import { WordsUsersService } from "./words-users.service";
 import { WordsDictionaryService } from "./words-dictionary.service";
 import { isTestWordsUser } from "../utils/words-test-user";
-
-export type LetterState = "correct" | "present" | "absent";
-
-export interface LetterEvaluation {
-  letter: string;
-  state: LetterState;
-}
-
-export interface GuessEvaluation {
-  letters: LetterEvaluation[];
-  pattern: string;
-  isCorrect: boolean;
-}
+import {
+  evaluateWordGuess,
+  patternToLetters,
+  type GuessEvaluation,
+  type LetterEvaluation,
+} from "../utils/words-guess-evaluator";
 
 export interface GuessHistoryEntry {
   attemptNumber: number;
@@ -159,7 +152,7 @@ export class WordsDailyGameService {
     }
 
     const attemptNumber = attemptsUsed + 1;
-    const evaluation = this.evaluateGuess(normalizedGuess, puzzle.puzzleWord);
+    const evaluation = evaluateWordGuess(normalizedGuess, puzzle.puzzleWord);
 
     const guessEntry = {
       attemptNumber,
@@ -281,55 +274,6 @@ export class WordsDailyGameService {
     };
   }
 
-  private evaluateGuess(guess: string, target: string): GuessEvaluation {
-    const guessChars = guess.split("");
-    const targetChars = target.split("");
-    const letters: LetterEvaluation[] = guessChars.map((letter) => ({
-      letter,
-      state: "absent",
-    }));
-    const usedTarget = new Array(targetChars.length).fill(false);
-
-    for (let index = 0; index < guessChars.length; index++) {
-      if (guessChars[index] === targetChars[index]) {
-        letters[index].state = "correct";
-        usedTarget[index] = true;
-      }
-    }
-
-    for (let index = 0; index < guessChars.length; index++) {
-      if (letters[index].state !== "absent") continue;
-      const letter = guessChars[index];
-      const targetIndex = targetChars.findIndex(
-        (targetLetter, targetLetterIndex) =>
-          !usedTarget[targetLetterIndex] && targetLetter === letter,
-      );
-      if (targetIndex !== -1) {
-        letters[index].state = "present";
-        usedTarget[targetIndex] = true;
-      }
-    }
-
-    const pattern = letters
-      .map((entry) => {
-        switch (entry.state) {
-          case "correct":
-            return "2";
-          case "present":
-            return "1";
-          default:
-            return "0";
-        }
-      })
-      .join("");
-
-    return {
-      letters,
-      pattern,
-      isCorrect: letters.every((entry) => entry.state === "correct"),
-    };
-  }
-
   async getDailyStatus({
     user,
     targetDate,
@@ -370,7 +314,7 @@ export class WordsDailyGameService {
           attemptNumber: guess.attemptNumber,
           guessWord: guess.guessWord,
           pattern: guess.pattern,
-          letters: this.patternToLetters(guess.guessWord, guess.pattern),
+          letters: patternToLetters(guess.guessWord, guess.pattern),
           createdAt: guess.createdAt,
         }))
       : [];
@@ -478,27 +422,6 @@ export class WordsDailyGameService {
     }
     const diff = finished.getTime() - first.getTime();
     return diff >= 0 ? diff : 0;
-  }
-
-  private patternToLetters(
-    guessWord: string,
-    pattern: string,
-  ): LetterEvaluation[] {
-    return guessWord.split("").map((letter, index) => ({
-      letter,
-      state: this.patternDigitToState(pattern.charAt(index)),
-    }));
-  }
-
-  private patternDigitToState(digit: string): LetterState {
-    switch (digit) {
-      case "2":
-        return "correct";
-      case "1":
-        return "present";
-      default:
-        return "absent";
-    }
   }
 
   private getDailyId(date: string) {

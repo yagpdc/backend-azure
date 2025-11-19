@@ -1,10 +1,10 @@
-Backend de teste para deploy no Azure Functions usando TypeScript e Express.js.
+﻿Backend de teste para deploy no Azure Functions usando TypeScript e Express.js.
 
 ## Words (novo modo)
 
-O backend expõe um módulo independente para o jogo **Words** com autenticação própria, puzzles diários, histórico paginado e um modo infinito usando o mesmo banco de dados MongoDB.
+O backend exp├Áe um m├│dulo independente para o jogo **Words** com autentica├º├úo pr├│pria, puzzles di├írios, hist├│rico paginado e um modo infinito usando o mesmo banco de dados MongoDB.
 
-### Autenticação e variáveis de ambiente
+### Autentica├º├úo e vari├íveis de ambiente
 
 - Configure no `.env` (e na Azure) os valores:
 
@@ -13,37 +13,43 @@ O backend expõe um módulo independente para o jogo **Words** com autenticaçã
   WORDS_ADMIN_PASSWORD=%3x0v7STOh@d
   ```
 
-  O backend usa esses dois valores como credencial padrão; basta garantir que exista um documento `WordsUser` com `name = WORDS_ADMIN_USER`.
-- Para múltiplas contas, defina `WORDS_CREDENTIALS` no formato `conta:senha[:userId]`, separados por vírgulas. Quando `userId` não for informado, o backend procura o usuário pelo campo `name`.
+  O backend usa esses dois valores como credencial padr├úo; basta garantir que exista um documento `WordsUser` com `name = WORDS_ADMIN_USER`.
+- Para m├║ltiplas contas, defina `WORDS_CREDENTIALS` no formato `conta:senha[:userId]`, separados por v├¡rgulas. Quando `userId` n├úo for informado, o backend procura o usu├írio pelo campo `name`.
 - Todas as rotas `/words` exigem HTTP Basic (`Authorization: Basic base64("conta:senha")`).
-- Os palpites enviados para `/words/puzzles/daily/guess` precisam existir no arquivo `dados/words-five-letters.txt`. Esse arquivo é gerado pelo `npm run words:import`; caso ele fique em outro diretório no deploy, defina `WORDS_DICTIONARY_PATH=/caminho/para/words-five-letters.txt`.
-- A conta configurada em `WORDS_TEST_USER` (padrão: `WORDS_ADMIN_USER`/`admin`) funciona como ambiente de testes: não acumula score/streak, não aparece no ranking e o modo diário não persiste histórico, permitindo jogar novamente quantas vezes quiser.
+- Os palpites enviados para `/words/puzzles/daily/guess` precisam existir no arquivo `dados/words-five-letters.txt`. Esse arquivo ├® gerado pelo `npm run words:import`; caso ele fique em outro diret├│rio no deploy, defina `WORDS_DICTIONARY_PATH=/caminho/para/words-five-letters.txt`.
+- A conta configurada em `WORDS_TEST_USER` (padr├úo: `WORDS_ADMIN_USER`/`admin`) funciona como ambiente de testes: n├úo acumula score/streak, n├úo aparece no ranking e o modo di├írio n├úo persiste hist├│rico, permitindo jogar novamente quantas vezes quiser.
 
-### Coleções principais
+### Cole├º├Áes principais
 
 - `WordsUser`: `{ name, streak, score, config, timestamps }`
 - `WordsPuzzle`: `{ puzzleWord, date (YYYY-MM-DD), maxAttempts, metadata }`
-- `WordsUserPuzzle`: histórico diário com `{ status, attemptsUsed, maxAttempts, score, guesses[], finishedAt }`
+- `WordsUserPuzzle`: hist├│rico di├írio com `{ status, attemptsUsed, maxAttempts, score, guesses[], finishedAt }`
 - `WordsBankEntry`: banco de palavras do modo infinito (`{ word, source, timestamps }`)
 
 ### Endpoints
 
 Todos exigem `Authorization: Basic ...`.
 
-| Método | Rota                | Descrição |
+| M├®todo | Rota                | Descri├º├úo |
 | ------ | ------------------- | --------- |
-| GET    | `/words/profile`    | Retorna nome, streak, score e config do usuário autenticado. |
-| PUT    | `/words/profile/avatar` | Atualiza o avatar salvo para o usuário autenticado. Recebe `frogType`, `hat`, `body` e `background` como `string` ou `null` e simplesmente persiste os valores enviados (o front pode aplicar defaults quando recebe `null`). |
-| GET    | `/words/history`    | Histórico paginado. Query params: `page` (default 1) e `pageSize` (default 10, máx. 100). |
+| GET    | `/words/profile`    | Retorna nome, streak, score e config do usu├írio autenticado. |
+| PUT    | `/words/profile/avatar` | Atualiza o avatar salvo para o usu├írio autenticado. Recebe `frogType`, `hat`, `body` e `background` como `string` ou `null` e simplesmente persiste os valores enviados (o front pode aplicar defaults quando recebe `null`). |
+| GET    | `/words/history`    | Hist├│rico paginado. Query params: `page` (default 1) e `pageSize` (default 10, m├íx. 100). |
 | POST   | `/words/history`    | Cria um novo registro de jogo (incrementa o streak). Corpo: `puzzleId`, `status`, `attemptsUsed`, `maxAttempts?`, `score?`, `finishedAt?`, `guesses[]` com `{ attemptNumber, guessWord, pattern, createdAt }`. |
-| GET    | `/words/puzzles/daily?date=YYYY-MM-DD` | Retorna o identificador diário (sem revelar a palavra) dessa data ou do dia atual, incluindo o progresso salvo (tentativas já feitas, status, pontuação). |
+| GET    | `/words/puzzles/daily?date=YYYY-MM-DD` | Retorna o identificador di├írio (sem revelar a palavra) dessa data ou do dia atual, incluindo o progresso salvo (tentativas j├í feitas, status, pontua├º├úo). |
 | GET    | `/words/puzzles`    | Lista puzzles paginados (`page`, `pageSize`). |
-| POST   | `/words/puzzles`    | Cria um puzzle `{ date, puzzleWord, maxAttempts?, metadata? }`. Datas são únicas. |
-| POST   | `/words/puzzles/daily/guess` | Processa a tentativa diária sem expor a palavra. Corpo: `{ guessWord, date?, dailyId? }`. Retorna o estado de cada letra (`absent`, `present`, `correct`), o número da tentativa, tentativas restantes e a pontuação; rejeita palavras fora do dicionário. |
-| GET    | `/words/ranking` | Lista o ranking ordenado por `score` e, em empates, pelo tempo total gasto (em ms) entre a primeira tentativa e o término de cada daily (`totalTimeSpentMs`). |
-| GET    | `/words/avatar/options` | Retorna o catálogo `frogs`, `hats`, `bodies` e `backgrounds` disponíveis para o avatar, permitindo que o front sincronize a lista sem redeploy. |
-| GET    | `/words/infinite/random` | Retorna uma palavra aleatória da coleção `WordsBankEntry`. |
-| GET    | `/words/infinite/words` | Lista paginada das palavras do modo infinito (`page`, `pageSize` até 500). |
+| POST   | `/words/puzzles`    | Cria um puzzle `{ date, puzzleWord, maxAttempts?, metadata? }`. Datas s├úo ├║nicas. |
+| POST   | `/words/puzzles/daily/guess` | Processa a tentativa di├íria sem expor a palavra. Corpo: `{ guessWord, date?, dailyId? }`. Retorna o estado de cada letra (`absent`, `present`, `correct`), o n├║mero da tentativa, tentativas restantes e a pontua├º├úo; rejeita palavras fora do dicion├írio. |
+| GET    | `/words/ranking` | Lista o ranking ordenado por `score` e, em empates, pelo tempo total gasto (em ms) entre a primeira tentativa e o t├®rmino de cada daily (`totalTimeSpentMs`). |
+| GET    | `/words/avatar/options` | Retorna o cat├ílogo `frogs`, `hats`, `bodies` e `backgrounds` dispon├¡veis para o avatar, permitindo que o front sincronize a lista sem redeploy. |
+| GET    | `/words/infinite/random` | Retorna uma palavra aleat├│ria da cole├º├úo `WordsBankEntry`. |
+| GET    | `/words/infinite/words` | Lista paginada das palavras do modo infinito (`page`, `pageSize` at├® 500). |
+
+
+| POST   | /words/infinite/run | Inicia (ou recupera) a run ativa do modo infinito com 4 tentativas por palavra. |
+| GET    | /words/infinite/run | Retorna o estado atual da run ativa (score, tentativas e histórico parcial). |
+| POST   | /words/infinite/run/guess | Submete um palpite { guessWord } no modo infinito e devolve o estado atualizado da run. |
+| POST   | /words/infinite/run/abandon | Encerra a run atual como *Game Over* e retorna o resumo + histórico da sequência. |
 
 O campo `config.avatar` segue o formato:
 
@@ -60,22 +66,22 @@ O campo `config.avatar` segue o formato:
 }
 ```
 
-Quando o usuário ainda não salvou um avatar, o backend retorna o `frogType` default e deixa os demais campos como `null`.
+Quando o usu├írio ainda n├úo salvou um avatar, o backend retorna o `frogType` default e deixa os demais campos como `null`.
 
-> Observação: o backend aceita qualquer string (ou `null`) para `frogType`, `hat`, `body` e `background`. O endpoint `/words/avatar/options` serve apenas como catálogo sugerido para o front sincronizar os ids conhecidos.
+> Observa├º├úo: o backend aceita qualquer string (ou `null`) para `frogType`, `hat`, `body` e `background`. O endpoint `/words/avatar/options` serve apenas como cat├ílogo sugerido para o front sincronizar os ids conhecidos.
 
-### Usuários e modo infinito: importação e manutenção
+### Usu├írios e modo infinito: importa├º├úo e manuten├º├úo
 
-1. Garanta o usuário padrão rodando `npm run words:seed-user` (opcionalmente passando o nome: `npm run words:seed-user -- MeuUsuario`). O script cria o documento em `WordsUser` se ele ainda não existir.
-2. Os arquivos base continuam em `dados/verbos.txt`, `dados/lexico.txt` e `dados/conjugacoes.txt`. Eles só precisam estar disponíveis localmente para gerar a lista.
+1. Garanta o usu├írio padr├úo rodando `npm run words:seed-user` (opcionalmente passando o nome: `npm run words:seed-user -- MeuUsuario`). O script cria o documento em `WordsUser` se ele ainda n├úo existir.
+2. Os arquivos base continuam em `dados/verbos.txt`, `dados/lexico.txt` e `dados/conjugacoes.txt`. Eles s├│ precisam estar dispon├¡veis localmente para gerar a lista.
 3. Execute `npm run words:import` sempre que quiser atualizar o banco. O script:
-   - lê todos os arquivos,
+   - l├¬ todos os arquivos,
    - normaliza as palavras (remove acentos/caracteres especiais, filtra apenas termos com 5 letras, converte para CAIXA ALTA),
-   - substitui o conteúdo da coleção `WordsBankEntry`,
-   - cria/atualiza o arquivo `dados/words-five-letters.txt` com todas as palavras válidas.
-4. Após importar uma vez, o ambiente de produção não precisa mais da pasta `dados/`: o backend passa a servir tudo diretamente da coleção MongoDB.
+   - substitui o conte├║do da cole├º├úo `WordsBankEntry`,
+   - cria/atualiza o arquivo `dados/words-five-letters.txt` com todas as palavras v├ílidas.
+4. Ap├│s importar uma vez, o ambiente de produ├º├úo n├úo precisa mais da pasta `dados/`: o backend passa a servir tudo diretamente da cole├º├úo MongoDB.
 
-> O script usa as mesmas credenciais (`MONGODB_URI` e `MONGODB_DB`) configuradas no `.env`. Certifique-se de que o usuário tenha permissão de escrita.
+> O script usa as mesmas credenciais (`MONGODB_URI` e `MONGODB_DB`) configuradas no `.env`. Certifique-se de que o usu├írio tenha permiss├úo de escrita.
 
 ### Respostas
 
@@ -147,7 +153,7 @@ Quando o usuário ainda não salvou um avatar, o backend retorna o `frogType` de
 }
 ```
 
-Estados possíveis: `absent` (a letra não existe na palavra), `present` (existe em outra posição) e `correct` (letra e posição corretas). O `dailyId` sempre segue o formato `YYYYMMDD`.
+Estados poss├¡veis: `absent` (a letra n├úo existe na palavra), `present` (existe em outra posi├º├úo) e `correct` (letra e posi├º├úo corretas). O `dailyId` sempre segue o formato `YYYYMMDD`.
 
 `POST /words/puzzles/daily/guess` devolve:
 
@@ -179,4 +185,4 @@ Estados possíveis: `absent` (a letra não existe na palavra), `present` (existe
 }
 ```
 
-Use `POST /words/puzzles` para cadastrar previamente todos os puzzles que serão disponibilizados para os usuários. Depois utilize `POST /words/history` para registrar os resultados diários e manter o streak atualizado automaticamente.
+Use `POST /words/puzzles` para cadastrar previamente todos os puzzles que ser├úo disponibilizados para os usu├írios. Depois utilize `POST /words/history` para registrar os resultados di├írios e manter o streak atualizado automaticamente.

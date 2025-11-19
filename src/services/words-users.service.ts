@@ -78,4 +78,34 @@ export class WordsUsersService {
       { new: true },
     );
   }
+
+  updateInfiniteProgress(
+    userId: string,
+    {
+      currentScore,
+      record,
+      status,
+    }: {
+      currentScore?: number;
+      record?: number;
+      status?: IWordsUser["infiniteStatus"];
+    },
+  ) {
+    const $set: Record<string, unknown> = {};
+    if (typeof currentScore === "number") {
+      $set.infiniteCurrentScore = currentScore;
+    }
+    if (typeof record === "number") {
+      $set.infiniteRecord = record;
+    }
+    if (status) {
+      $set.infiniteStatus = status;
+    }
+
+    if (!Object.keys($set).length) {
+      return WordsUserModel.findById(userId);
+    }
+
+    return WordsUserModel.findByIdAndUpdate(userId, { $set }, { new: true });
+  }
 }

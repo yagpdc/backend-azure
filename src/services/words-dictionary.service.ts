@@ -13,15 +13,21 @@ const DEFAULT_DICTIONARY_PATH = path.resolve(
 export class WordsDictionaryService {
   private words: Set<string> | null = null;
   private loadPromise: Promise<void> | null = null;
+  private wordsList: string[] | null = null;
 
   constructor(
-    private readonly dictionaryPath =
-      process.env.WORDS_DICTIONARY_PATH ?? DEFAULT_DICTIONARY_PATH,
+    private readonly dictionaryPath = process.env.WORDS_DICTIONARY_PATH ??
+      DEFAULT_DICTIONARY_PATH,
   ) {}
 
   async isAllowed(word: string): Promise<boolean> {
     await this.ensureLoaded();
     return this.words?.has(word.toUpperCase()) ?? false;
+  }
+
+  async getAllWords(): Promise<string[]> {
+    await this.ensureLoaded();
+    return this.wordsList ? [...this.wordsList] : [];
   }
 
   private async ensureLoaded() {
@@ -43,6 +49,7 @@ export class WordsDictionaryService {
       }
 
       this.words = new Set(entries);
+      this.wordsList = entries;
     })();
 
     return this.loadPromise;

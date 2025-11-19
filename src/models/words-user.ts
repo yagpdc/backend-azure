@@ -21,6 +21,9 @@ export interface IWordsUser extends Document {
   score: number;
   totalTimeSpentMs: number;
   config: Record<string, unknown>;
+  infiniteCurrentScore: number;
+  infiniteRecord: number;
+  infiniteStatus: "idle" | "active" | "failed" | "completed";
   createdAt: Date;
   updatedAt: Date;
 }
@@ -32,6 +35,14 @@ const wordsUserSchema = new Schema<IWordsUser>(
     score: { type: Number, required: true, default: 0 },
     totalTimeSpentMs: { type: Number, required: true, default: 0 },
     config: { type: Schema.Types.Mixed, default: {} },
+    infiniteCurrentScore: { type: Number, required: true, default: 0 },
+    infiniteRecord: { type: Number, required: true, default: 0 },
+    infiniteStatus: {
+      type: String,
+      required: true,
+      enum: ["idle", "active", "failed", "completed"],
+      default: "idle",
+    },
   },
   {
     timestamps: true,

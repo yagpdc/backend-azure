@@ -5,6 +5,7 @@ import {
 } from "../models/words-puzzle";
 import { CreateWordsHistoryEntrySchema } from "../models/words-user-puzzle";
 import { SubmitDailyGuessSchema } from "../models/words-daily-guess";
+import { SubmitInfiniteGuessSchema } from "../models/words-infinite-guess";
 import { UpdateWordsAvatarSchema } from "../models/words-avatar";
 import { WordsPuzzlesService } from "../services/words-puzzles.service";
 import {
@@ -17,6 +18,10 @@ import {
   WordsDailyGameService,
 } from "../services/words-daily-game.service";
 import { WordsUsersService } from "../services/words-users.service";
+import {
+  WordsInfiniteRunError,
+  WordsInfiniteRunService,
+} from "../services/words-infinite-run.service";
 import { isTestWordsUser } from "../utils/words-test-user";
 import {
   getWordsAvatarOptions,
@@ -24,6 +29,7 @@ import {
   normalizeAvatarPayload,
 } from "../utils/words-avatar";
 import type { IWordsUser } from "../models/words-user";
+import type { IWordsInfiniteRun } from "../models/words-infinite-run";
 
 export class WordsController {
   private readonly puzzlesService = new WordsPuzzlesService();
@@ -31,6 +37,7 @@ export class WordsController {
   private readonly bankService = new WordsBankService();
   private readonly dailyGameService = new WordsDailyGameService();
   private readonly usersService = new WordsUsersService();
+  private readonly infiniteRunService = new WordsInfiniteRunService();
 
   getProfile = (req: Request, res: Response) => {
     const user = req.wordsUser!;
@@ -279,6 +286,61 @@ export class WordsController {
     }
   };
 
+  startInfiniteRun = async (req: Request, res: Response) => {
+    try {
+      const result = await this.infiniteRunService.startRun(req.wordsUser!);
+      req.wordsUser = result.user;
+      return res.json(
+        this.mapInfiniteRun(result.run, result.totalWords, result.user),
+      );
+    } catch (error: any) {
+      return this.handleInfiniteError(res, error);
+    }
+  };
+
+  getInfiniteRunStatus = async (req: Request, res: Response) => {
+    try {
+      const result = await this.infiniteRunService.getRun(req.wordsUser!);
+      return res.json(
+        this.mapInfiniteRun(result.run, result.totalWords, result.user),
+      );
+    } catch (error: any) {
+      return this.handleInfiniteError(res, error);
+    }
+  };
+
+  submitInfiniteGuess = async (req: Request, res: Response) => {
+    const validation = SubmitInfiniteGuessSchema.safeParse(req.body);
+    if (!validation.success) {
+      return res.status(400).json({ error: validation.error.issues });
+    }
+
+    try {
+      const result = await this.infiniteRunService.submitGuess(
+        req.wordsUser!,
+        validation.data.guessWord,
+      );
+      req.wordsUser = result.user;
+      return res.json(
+        this.mapInfiniteRun(result.run, result.totalWords, result.user),
+      );
+    } catch (error: any) {
+      return this.handleInfiniteError(res, error);
+    }
+  };
+
+  abandonInfiniteRun = async (req: Request, res: Response) => {
+    try {
+      const result = await this.infiniteRunService.abandonRun(req.wordsUser!);
+      req.wordsUser = result.user;
+      return res.json(
+        this.mapInfiniteRun(result.run, result.totalWords, result.user),
+      );
+    } catch (error: any) {
+      return this.handleInfiniteError(res, error);
+    }
+  };
+
   private mapPuzzle(puzzle: IWordsPuzzle) {
     return {
       puzzleId: puzzle.id,
@@ -315,12 +377,84 @@ export class WordsController {
     return res.json(getWordsAvatarOptions());
   };
 
+  private handleInfiniteError(res: Response, error: any) {
+    if (error instanceof WordsInfiniteRunError) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
+    return res.status(500).json({ error: error.message });
+  }
+
+  private mapInfiniteRun(
+    run: IWordsInfiniteRun,
+    totalWords: number,
+    user: IWordsUser,
+  ) {
+    const wordsCompleted = run.usedWords.length;
+    const wordsRemaining =
+      run.status === "active"
+        ? Math.max(totalWords - wordsCompleted - 1, 0)
+        : Math.max(totalWords - wordsCompleted, 0);
+    const history = run.history.map((entry) => ({
+      order: entry.order,
+      word: entry.word,
+      result: entry.result,
+      attemptsUsed: entry.attemptsUsed,
+      finishedAt: entry.finishedAt.toISOString(),
+      guesses: entry.guesses.map((guess) => ({
+        attemptNumber: guess.attemptNumber,
+        guessWord: guess.guessWord,
+        pattern: guess.pattern,
+        createdAt: guess.createdAt.toISOString(),
+      })),
+    }));
+
+    return {
+      runId: run.id,
+      status: run.status,
+      currentScore: run.currentScore,
+      record: user.infiniteRecord ?? 0,
+      attemptsUsed: run.attemptsUsed,
+      maxAttempts: run.maxAttempts,
+      wordsCompleted,
+      wordsRemaining,
+      totalWords,
+      wordsPlayed: history.length,
+      nextWord: run.nextWord
+        ? {
+            length: run.nextWord.length,
+            remainingAttempts: Math.max(run.maxAttempts - run.attemptsUsed, 0),
+          }
+        : null,
+      guesses: run.currentGuesses.map((guess) => ({
+        attemptNumber: guess.attemptNumber,
+        guessWord: guess.guessWord,
+        pattern: guess.pattern,
+        createdAt: guess.createdAt.toISOString(),
+      })),
+      history,
+      summary:
+        run.status === "active"
+          ? undefined
+          : {
+              score: run.currentScore,
+              record: user.infiniteRecord ?? 0,
+              wordsPlayed: history.length,
+              wordsRemaining,
+            },
+    };
+  }
+
   private mapProfile(user: IWordsUser) {
     return {
       id: user.id,
       name: user.name,
       streak: user.streak,
       score: user.score ?? 0,
+      infinite: {
+        status: user.infiniteStatus ?? "idle",
+        currentScore: user.infiniteCurrentScore ?? 0,
+        record: user.infiniteRecord ?? 0,
+      },
       config: this.buildUserConfig(user),
       createdAt: user.createdAt.toISOString(),
       updatedAt: user.updatedAt.toISOString(),
