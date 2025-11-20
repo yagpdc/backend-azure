@@ -124,16 +124,34 @@ export function setupSocketIO(httpServer: HTTPServer): SocketIOServer {
     pingTimeout: 20000,
     pingInterval: 10000,
     connectTimeout: 10000,
+    allowEIO3: true,
   });
 
   const onlineService = OnlineUsersService.getInstance();
-  
+
   // Inicializar serviço de salas com Socket.IO
   roomSocketService.setIO(io);
 
   io.on("connection", (socket) => {
     console.log(`🔌 Socket conectado: ${socket.id}`);
-    let currentUserId: string | null = null;
+
+    // Tentar obter userId do handshake query
+    const userIdFromQuery = socket.handshake.query.userId as string | undefined;
+    let currentUserId: string | null = userIdFromQuery || null;
+
+    // Se userId veio na query, registrar automaticamente
+    if (currentUserId) {
+      onlineService.addUser(currentUserId, socket.id);
+      console.log(
+        `✅ Usuário ${currentUserId} conectado automaticamente (${onlineService.getConnectionCount(currentUserId)} conexão(ões))`
+      );
+
+      // Notificar todos sobre a mudança de status
+      io.emit("users:online", {
+        onlineUserIds: onlineService.getOnlineUserIds(),
+        totalOnline: onlineService.getOnlineCount(),
+      });
+    }
 
     // Usuário se identifica ao conectar
     socket.on("user:online", (data: { userId: string }) => {
@@ -211,17 +229,78 @@ export function setupSocketIO(httpServer: HTTPServer): SocketIOServer {
     // Cliente entra em uma sala específica
     socket.on("room:join", (data: { roomId: string }) => {
       const { roomId } = data;
+      console.log(`📥 Socket ${socket.id} solicitou join na sala:`, roomId);
       if (roomId) {
         roomSocketService.joinRoom(socket, roomId);
+        // Confirmar que entrou na sala
+        socket.emit("room:joined", { roomId, socketId: socket.id });
+        console.log(`✅ Socket ${socket.id} confirmado na sala ${roomId}`);
+      } else {
+        console.warn(`⚠️ Socket ${socket.id} tentou join sem roomId`);
       }
     });
 
     // Cliente sai de uma sala
     socket.on("room:leave", (data: { roomId: string }) => {
       const { roomId } = data;
+      console.log(`📥 Socket ${socket.id} saindo da sala:`, roomId);
       if (roomId) {
         roomSocketService.leaveRoom(socket, roomId);
       }
+    });
+
+    // Cliente solicita rematch
+    socket.on("room:rematch-request", async (data: { roomId: string }) => {
+      const { roomId } = data;
+      const userId = socket.handshake.query.userId as string;
+
+      if (!userId) {
+        console.error("❌ room:rematch-request sem userId");
+        return;
+      }
+
+      console.log(`🔄 Socket ${socket.id} (user ${userId}) pedindo rematch na sala ${roomId}`);
+
+      try {
+        await roomSocketService.handleRematchRequest(roomId, userId);
+      } catch (error: any) {
+        console.error("❌ Erro ao processar rematch request:", error);
+        socket.emit("error", { message: error.message });
+      }
+    });
+
+    // Cliente responde ao rematch (aceita ou rejeita)
+    socket.on("room:rematch-response", async (data: { roomId: string; accepted: boolean }) => {
+      const { roomId, accepted } = data;
+      const userId = socket.handshake.query.userId as string;
+
+      if (!userId) {
+        console.error("❌ room:rematch-response sem userId");
+        return;
+      }
+
+      console.log(`${accepted ? '✅' : '❌'} Socket ${socket.id} (user ${userId}) ${accepted ? 'aceitou' : 'recusou'} rematch na sala ${roomId}`);
+
+      try {
+        await roomSocketService.handleRematchResponse(roomId, userId, accepted);
+      } catch (error: any) {
+        console.error("❌ Erro ao processar rematch response:", error);
+        socket.emit("error", { message: error.message });
+      }
+    });
+
+    // Limpar sala quando socket desconectar
+    const originalDisconnect = socket.disconnect.bind(socket);
+    socket.on("disconnecting", () => {
+      console.log(`🔌 Socket ${socket.id} desconectando, limpando salas...`);
+      // Socket.IO automaticamente remove de todas as salas, mas vamos limpar nosso mapa
+      const rooms = Array.from(socket.rooms);
+      rooms.forEach(room => {
+        if (room !== socket.id && room.startsWith("room:")) {
+          const roomId = room.replace("room:", "");
+          console.log(`🚪 Limpando socket ${socket.id} da sala ${roomId}`);
+        }
+      });
     });
   });
 

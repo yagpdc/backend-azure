@@ -3,7 +3,7 @@ import type { Server as SocketIOServer, Socket } from "socket.io";
 export class RoomSocketService {
   private static instance: RoomSocketService;
   private io: SocketIOServer | null = null;
-  
+
   // Mapear socketId -> roomId para saber quem está em qual sala
   private socketToRoom: Map<string, string> = new Map();
 
@@ -44,7 +44,7 @@ export class RoomSocketService {
       console.warn("⚠️  Socket.IO não inicializado");
       return;
     }
-    
+
     this.io.to(`room:${roomId}`).emit(event, data);
     console.log(`📢 Evento '${event}' enviado para sala ${roomId}`);
   }
@@ -78,12 +78,13 @@ export class RoomSocketService {
    * Notificar que o jogo começou
    */
   notifyGameStarted(roomId: string, data: {
-    currentTurnPlayer: string;
-    firstWord: string; // Escondido como "?????"
+    run: any; // Run completo
+    currentTurnPlayerId: string;
   }) {
     this.emitToRoom(roomId, "room:game-started", {
       roomId,
-      ...data,
+      run: data.run,
+      currentTurnPlayerId: data.currentTurnPlayerId,
       timestamp: new Date(),
     });
   }
@@ -94,15 +95,18 @@ export class RoomSocketService {
   notifyGuessMade(roomId: string, data: {
     playerId: string;
     playerName: string;
-    guess: string;
-    pattern: string;
-    isCorrect: boolean;
-    attemptsUsed: number;
-    maxAttempts: number;
+    guess: {
+      guessWord: string;
+      pattern: string;
+    };
+    attemptNumber: number;
   }) {
     this.emitToRoom(roomId, "room:guess-made", {
       roomId,
-      ...data,
+      playerId: data.playerId,
+      playerName: data.playerName,
+      guess: data.guess,
+      attemptNumber: data.attemptNumber,
       timestamp: new Date(),
     });
   }
@@ -111,12 +115,13 @@ export class RoomSocketService {
    * Notificar mudança de turno
    */
   notifyTurnChanged(roomId: string, data: {
-    nextTurnPlayer: string;
-    attemptNumber: number;
+    currentTurnPlayerId: string;
+    currentTurnPlayerName: string;
   }) {
     this.emitToRoom(roomId, "room:turn-changed", {
       roomId,
-      ...data,
+      currentTurnPlayerId: data.currentTurnPlayerId,
+      currentTurnPlayerName: data.currentTurnPlayerName,
       timestamp: new Date(),
     });
   }
@@ -127,11 +132,13 @@ export class RoomSocketService {
   notifyWordCompleted(roomId: string, data: {
     word: string;
     currentScore: number;
-    nextTurnPlayer: string;
+    nextWord: any | null; // Próxima palavra (escondida)
   }) {
     this.emitToRoom(roomId, "room:word-completed", {
       roomId,
-      ...data,
+      word: data.word,
+      currentScore: data.currentScore,
+      nextWord: data.nextWord,
       timestamp: new Date(),
     });
   }
@@ -141,11 +148,14 @@ export class RoomSocketService {
    */
   notifyGameOver(roomId: string, data: {
     finalScore: number;
-    correctWord: string;
+    wordsCompleted: number;
+    reason: "failed" | "abandoned";
   }) {
     this.emitToRoom(roomId, "room:game-over", {
       roomId,
-      ...data,
+      finalScore: data.finalScore,
+      wordsCompleted: data.wordsCompleted,
+      reason: data.reason,
       timestamp: new Date(),
     });
   }
@@ -177,6 +187,105 @@ export class RoomSocketService {
       ...data,
       timestamp: new Date(),
     });
+  }
+
+  /**
+   * Lidar com pedido de rematch
+   */
+  async handleRematchRequest(roomId: string, requesterId: string) {
+    const { wordsInfiniteRoomService } = await import("./words-infinite-room.service");
+
+    const room = await wordsInfiniteRoomService.getRoom(roomId);
+    if (!room) {
+      throw new Error("Sala não encontrada");
+    }
+
+    const requester = room.players.find(p => p.userId === requesterId);
+    if (!requester) {
+      throw new Error("Jogador não encontrado na sala");
+    }
+
+    // Marcar que este jogador quer rematch
+    await wordsInfiniteRoomService.setRematchRequest(roomId, requesterId, true);
+
+    // Notificar o outro jogador
+    this.emitToRoom(roomId, "room:rematch-request", {
+      roomId,
+      requesterId,
+      requesterName: requester.username,
+    });
+
+    console.log(`🔄 [REMATCH] ${requester.username} pediu rematch na sala ${roomId}`);
+  }
+
+  /**
+   * Lidar com resposta ao rematch
+   */
+  async handleRematchResponse(roomId: string, responderId: string, accepted: boolean) {
+    const { wordsInfiniteRoomService } = await import("./words-infinite-room.service");
+
+    const room = await wordsInfiniteRoomService.getRoom(roomId);
+    if (!room) {
+      throw new Error("Sala não encontrada");
+    }
+
+    const responder = room.players.find(p => p.userId === responderId);
+    if (!responder) {
+      throw new Error("Jogador não encontrado na sala");
+    }
+
+    if (!accepted) {
+      // Recusou - limpar flags de rematch e notificar
+      await wordsInfiniteRoomService.clearRematchRequests(roomId);
+
+      this.emitToRoom(roomId, "room:rematch-response", {
+        roomId,
+        accepted: false,
+        responderId,
+        responderName: responder.username,
+      });
+
+      console.log(`❌ [REMATCH] ${responder.username} recusou rematch na sala ${roomId}`);
+      return;
+    }
+
+    // Aceitou - verificar se ambos querem rematch
+    await wordsInfiniteRoomService.setRematchRequest(roomId, responderId, true);
+    const bothWantRematch = await wordsInfiniteRoomService.checkBothWantRematch(roomId);
+
+    if (bothWantRematch) {
+      // Criar nova sala com os mesmos jogadores
+      const newRoom = await wordsInfiniteRoomService.createRematchRoom(room);
+
+      // Iniciar run automaticamente
+      const { wordsInfiniteCoopService } = await import("./words-infinite-coop.service");
+      // wordsInfiniteCoopService is exported as an instance; use it directly
+      const { run, currentTurnPlayer } = await wordsInfiniteCoopService.startCoopRun(newRoom);
+
+      // Atualizar sala com o run
+      // run._id can be an ObjectId - cast to string safely
+      await wordsInfiniteRoomService.updateCurrentRun(newRoom.roomId, String((run as any)._id));
+
+      this.emitToRoom(roomId, "room:rematch-response", {
+        roomId,
+        accepted: true,
+        responderId,
+        responderName: responder.username,
+        newRoomId: newRoom.roomId,
+      });
+
+      console.log(`✅ [REMATCH] Nova sala criada: ${newRoom.roomId} com run iniciado`);
+    } else {
+      // Marcou que aceita, mas o outro ainda não pediu
+      this.emitToRoom(roomId, "room:rematch-response", {
+        roomId,
+        accepted: true,
+        responderId,
+        responderName: responder.username,
+      });
+
+      console.log(`⏳ [REMATCH] ${responder.username} aceitou, aguardando outro jogador`);
+    }
   }
 }
 

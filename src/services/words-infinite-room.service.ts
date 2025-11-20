@@ -156,7 +156,7 @@ export class WordsInfiniteRoomService {
 
   /**
    * Calcular de quem é o turno atual
-   * Lógica: 
+   * Lógica:
    * - Jogo 1 (gamesPlayed = 0): p1, p2, p1, p2, p1
    * - Jogo 2 (gamesPlayed = 1): p2, p1, p2, p1, p2
    * - Jogo 3 (gamesPlayed = 2): p1, p2, p1, p2, p1
@@ -181,11 +181,21 @@ export class WordsInfiniteRoomService {
     // Se p2 inicia: 1=p2, 2=p1, 3=p2, 4=p1, 5=p2
     const attemptIsOdd = attemptNumber % 2 === 1;
 
-    if (gameStartsWithPlayer1) {
-      return attemptIsOdd ? player1 : player2;
-    } else {
-      return attemptIsOdd ? player2 : player1;
-    }
+    const result = (gameStartsWithPlayer1 && attemptIsOdd) || (!gameStartsWithPlayer1 && !attemptIsOdd)
+      ? player1
+      : player2;
+
+    console.log("🎯 [ROOM] getCurrentTurnPlayer:", {
+      attemptNumber,
+      gamesPlayed: room.gamesPlayed,
+      gameStartsWithPlayer1,
+      attemptIsOdd,
+      result,
+      player1,
+      player2,
+    });
+
+    return result;
   }
 
   /**
@@ -206,6 +216,129 @@ export class WordsInfiniteRoomService {
   getNextPlayer(room: WordsInfiniteRoom, currentAttemptNumber: number): string {
     const nextAttemptNumber = currentAttemptNumber + 1;
     return this.getCurrentTurnPlayer(room, nextAttemptNumber);
+  }
+
+  /**
+   * Buscar todas as salas que contêm um usuário
+   */
+  async findAllRoomsByUser(userId: string): Promise<WordsInfiniteRoom[]> {
+    return WordsInfiniteRoomModel.find({
+      "players.userId": userId,
+    });
+  }
+
+  /**
+   * Forçar remoção de um jogador de uma sala específica ou todas
+   */
+  async forceRemovePlayer(userId: string, roomId: string): Promise<void> {
+    if (roomId === "ANY") {
+      // Remove de todas as salas
+      await WordsInfiniteRoomModel.updateMany(
+        { "players.userId": userId },
+        { $pull: { players: { userId } } }
+      );
+
+      // Deletar salas que ficaram vazias
+      await WordsInfiniteRoomModel.deleteMany({ players: { $size: 0 } });
+    } else {
+      // Remove de uma sala específica
+      const room = await WordsInfiniteRoomModel.findOne({ roomId });
+      if (room) {
+        room.players = room.players.filter((p) => p.userId !== userId);
+
+        if (room.players.length === 0) {
+          await WordsInfiniteRoomModel.deleteOne({ roomId });
+        } else {
+          await room.save();
+        }
+      }
+    }
+  }
+
+  /**
+   * Marcar que um jogador quer rematch
+   */
+  async setRematchRequest(roomId: string, userId: string, wantsRematch: boolean): Promise<void> {
+    await WordsInfiniteRoomModel.updateOne(
+      { roomId, "players.userId": userId },
+      { $set: { "players.$.wantsRematch": wantsRematch } }
+    );
+  }
+
+  /**
+   * Limpar todas as flags de rematch
+   */
+  async clearRematchRequests(roomId: string): Promise<void> {
+    await WordsInfiniteRoomModel.updateOne(
+      { roomId },
+      { $set: { "players.$[].wantsRematch": false } }
+    );
+  }
+
+  /**
+   * Verificar se ambos jogadores querem rematch
+   */
+  async checkBothWantRematch(roomId: string): Promise<boolean> {
+    const room = await WordsInfiniteRoomModel.findOne({ roomId });
+    if (!room || room.players.length !== 2) {
+      return false;
+    }
+
+    return room.players.every(p => p.wantsRematch === true);
+  }
+
+  /**
+   * Criar nova sala para rematch com os mesmos jogadores
+   */
+  async createRematchRoom(oldRoom: WordsInfiniteRoom): Promise<WordsInfiniteRoom> {
+    // Gerar novo código
+    const newRoomId = await this.generateRoomCode();
+
+    // Criar nova sala com mesmos jogadores (inverter ordem para alternar quem começa)
+    const newRoom = await WordsInfiniteRoomModel.create({
+      roomId: newRoomId,
+      mode: oldRoom.mode,
+      players: [
+        {
+          userId: oldRoom.players[1].userId, // Inverter: player 2 vira player 1
+          username: oldRoom.players[1].username,
+          joinedAt: new Date(),
+          wantsRematch: false,
+        },
+        {
+          userId: oldRoom.players[0].userId, // Inverter: player 1 vira player 2
+          username: oldRoom.players[0].username,
+          joinedAt: new Date(),
+          wantsRematch: false,
+        },
+      ],
+      maxPlayers: 2,
+      status: "playing", // Já começa jogando
+      createdBy: oldRoom.players[1].userId, // Novo "criador" é o que era player 2
+      gamesPlayed: 0,
+    });
+
+    // Marcar sala antiga como finished
+    await WordsInfiniteRoomModel.updateOne(
+      { roomId: oldRoom.roomId },
+      { $set: { status: "finished" } }
+    );
+
+    return newRoom;
+  }
+
+  /**
+   * Gerar um código de sala único (6 caracteres) usando `nanoid`.
+   */
+  private async generateRoomCode(): Promise<string> {
+    // Tenta gerar um código e garantir unicidade no banco
+    for (let i = 0; i < 5; i++) {
+      const candidate = nanoid(6).toUpperCase();
+      const exists = await WordsInfiniteRoomModel.exists({ roomId: candidate });
+      if (!exists) return candidate;
+    }
+    // Fallback: gerar com timestamp
+    return (`R${Date.now().toString(36)}`).toUpperCase().slice(0, 6);
   }
 }
 

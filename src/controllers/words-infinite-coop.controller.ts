@@ -17,12 +17,12 @@ export class WordsInfiniteCoopController {
     const enrichedPlayers = await Promise.all(
       players.map(async (player) => {
         const user = await this.usersService.findById(player.userId);
-        
+
         // Avatar está em config.avatar, não em config diretamente
         const avatarValue = user?.config && typeof user.config === "object"
           ? (user.config as { avatar?: unknown }).avatar
           : undefined;
-        
+
         return {
           userId: player.userId,
           username: player.username,
@@ -114,11 +114,11 @@ export class WordsInfiniteCoopController {
 
       // Verificar se já está em uma sala ativa
       const existingRoom = await wordsInfiniteRoomService.getUserActiveRoom(userId);
-      
+
       if (existingRoom) {
         // Já está em uma sala - retornar a sala existente
         console.log(`⚠️  Usuário ${userId} já está na sala ${existingRoom.roomId}, retornando sala existente`);
-        
+
         // Buscar run se estiver jogando
         let run = null;
         let currentTurnPlayer = null;
@@ -201,7 +201,7 @@ export class WordsInfiniteCoopController {
 
       const { roomId } = req.params;
       console.log(`🚺 Usuário ${userId} tentando entrar na sala ${roomId}`);
-      
+
       const room = await wordsInfiniteRoomService.joinRoom(userId, roomId);
       console.log(`✅ Usuário ${userId} entrou na sala ${roomId}. Status: ${room.status}, Players: ${room.players.length}/${room.maxPlayers}`);
 
@@ -229,8 +229,19 @@ export class WordsInfiniteCoopController {
         // Notificar que o jogo começou
         console.log(`📢 Notificando sala ${room.roomId} que o jogo começou. Turno de: ${currentTurnPlayer}`);
         roomSocketService.notifyGameStarted(room.roomId, {
-          currentTurnPlayer,
-          firstWord: "?????", // Esconder palavra
+          run: {
+            id: run._id,
+            currentScore: run.currentScore,
+            attemptsUsed: run.attemptsUsed,
+            maxAttempts: run.maxAttempts,
+            guesses: run.currentGuesses,
+            status: run.status,
+            nextWord: run.nextWord ? {
+              length: run.nextWord.length,
+              word: "?????", // Esconder palavra
+            } : null,
+          },
+          currentTurnPlayerId: currentTurnPlayer,
         });
       }
 
@@ -346,9 +357,14 @@ export class WordsInfiniteCoopController {
     try {
       const userId = this.getUserId(req);
 
-      const { guess } = req.body;
-      if (!guess) {
-        return res.status(400).json({ error: "Palpite não fornecido" });
+      // Aceitar tanto 'guess' quanto 'guessWord' para compatibilidade
+      const { guess, guessWord, roomId } = req.body;
+      const guessValue = guess || guessWord;
+
+      console.log("🎯 Submit guess request:", { userId, guess, guessWord, guessValue, roomId, body: req.body });
+
+      if (!guessValue) {
+        return res.status(400).json({ error: "Palpite não fornecido (campo 'guess' ou 'guessWord' obrigatório)" });
       }
 
       // Buscar sala ativa do usuário
@@ -357,27 +373,36 @@ export class WordsInfiniteCoopController {
         return res.status(404).json({ error: "Você não está em uma sala ativa" });
       }
 
+      console.log(`📝 Processando guess "${guessValue}" do usuário ${userId} na sala ${room.roomId}`);
+
       // Submit guess
       const result = await wordsInfiniteCoopService.submitCoopGuess(
         room,
         userId,
-        guess
+        guessValue
       );
+
+      console.log("✅ Guess processado com sucesso:", {
+        isCorrect: result.result.isCorrect,
+        isGameOver: result.isGameOver,
+        nextTurnPlayer: result.nextTurnPlayer,
+        attemptsUsed: result.run.attemptsUsed,
+      });
 
       // Buscar dados do jogador
       const player = room.players.find(p => p.userId === userId);
       const playerName = player?.username || "Jogador";
 
       // Notificar sobre o palpite
-      const guessData = result.result.guess || { pattern: "CCCCC", guessWord: guess };
+      const guessData = result.result.guess || { pattern: "CCCCC", guessWord: guessValue };
       roomSocketService.notifyGuessMade(room.roomId, {
         playerId: userId,
         playerName,
-        guess: guessData.guessWord,
-        pattern: guessData.pattern,
-        isCorrect: result.result.isCorrect || false,
-        attemptsUsed: result.run.attemptsUsed,
-        maxAttempts: result.run.maxAttempts,
+        guess: {
+          guessWord: guessData.guessWord,
+          pattern: guessData.pattern,
+        },
+        attemptNumber: result.run.attemptsUsed,
       });
 
       // Se vitória (palavra completada)
@@ -385,23 +410,30 @@ export class WordsInfiniteCoopController {
         roomSocketService.notifyWordCompleted(room.roomId, {
           word: guessData.guessWord,
           currentScore: result.run.currentScore,
-          nextTurnPlayer: result.nextTurnPlayer || "",
+          nextWord: result.run.nextWord ? {
+            length: result.run.nextWord.length,
+            word: "?????", // Esconder palavra
+          } : null,
         });
       }
 
       // Se derrota (game over)
       if (result.isGameOver) {
+        // Calcular quantas palavras foram completadas
+        const wordsCompleted = Math.floor((result.run.currentScore || 0) / 10); // Assumindo 10 pontos por palavra
         roomSocketService.notifyGameOver(room.roomId, {
           finalScore: result.result.finalScore || result.run.currentScore,
-          correctWord: result.result.correctWord || "",
+          wordsCompleted,
+          reason: "failed",
         });
       }
 
       // Se apenas mudou de turno
       if (!result.result.isCorrect && !result.isGameOver && result.nextTurnPlayer) {
+        const nextPlayer = room.players.find(p => p.userId === result.nextTurnPlayer);
         roomSocketService.notifyTurnChanged(room.roomId, {
-          nextTurnPlayer: result.nextTurnPlayer,
-          attemptNumber: result.run.attemptsUsed + 1,
+          currentTurnPlayerId: result.nextTurnPlayer,
+          currentTurnPlayerName: nextPlayer?.username || "Jogador",
         });
       }
 
@@ -410,17 +442,21 @@ export class WordsInfiniteCoopController {
         isCorrect: result.result.isCorrect,
         isGameOver: result.isGameOver,
         nextTurnPlayer: result.nextTurnPlayer,
+        currentTurnPlayerId: result.nextTurnPlayer, // Para compatibilidade com frontend
         currentScore: result.run.currentScore,
         attemptsUsed: result.run.attemptsUsed,
         maxAttempts: result.run.maxAttempts,
         currentGuesses: result.run.currentGuesses,
+        status: result.run.status,
+        guesses: result.run.currentGuesses,
+        nextWord: result.run.nextWord,
         // Se acabou o jogo
         finalScore: result.result.finalScore,
         correctWord: result.result.correctWord,
       });
     } catch (error: any) {
       console.error("Erro ao enviar palpite:", error);
-      
+
       if (error instanceof WordsInfiniteRunError) {
         return res.status(error.statusCode).json({
           error: error.message,
@@ -450,11 +486,21 @@ export class WordsInfiniteCoopController {
       const player = room.players.find(p => p.userId === userId);
       const result = await wordsInfiniteCoopService.abandonCoopRun(room, userId);
 
+      // Calcular quantas palavras foram completadas
+      const wordsCompleted = Math.floor((result.finalScore || 0) / 10); // Assumindo 10 pontos por palavra
+
       // Notificar que jogador abandonou
       if (player) {
         roomSocketService.notifyPlayerAbandoned(room.roomId, {
           playerId: userId,
           playerName: player.username,
+        });
+
+        // Notificar game over por abandono
+        roomSocketService.notifyGameOver(room.roomId, {
+          finalScore: result.finalScore || 0,
+          wordsCompleted,
+          reason: "abandoned",
         });
       }
 
@@ -513,22 +559,46 @@ export class WordsInfiniteCoopController {
    * POST /words/infinity/coop/force-leave
    * Forçar saída de qualquer sala (waiting ou playing)
    * Útil quando usuário está preso em uma sala
+   * NOTA: Funciona mesmo se a sala não existir mais
    */
   async forceLeave(req: Request, res: Response) {
     try {
       const userId = this.getUserId(req);
 
       const room = await wordsInfiniteRoomService.getUserActiveRoom(userId);
+
+      // Se não encontrou sala, limpar qualquer referência órfã
       if (!room) {
-        return res.status(404).json({ error: "Você não está em uma sala" });
+        console.log(`⚠️ Usuário ${userId} não tem sala ativa no banco. Limpando referências...`);
+
+        // Tentar limpar qualquer sala que possa ter referência ao usuário
+        try {
+          const allRooms = await wordsInfiniteRoomService.findAllRoomsByUser(userId);
+          for (const orphanRoom of allRooms) {
+            await wordsInfiniteRoomService.forceRemovePlayer(userId, orphanRoom.roomId);
+            console.log(`🧹 Removido de sala órfã: ${orphanRoom.roomId}`);
+          }
+        } catch (cleanupError) {
+          console.error("Erro ao limpar salas órfãs:", cleanupError);
+        }
+
+        return res.status(200).json({
+          message: "Você não está em nenhuma sala (ou foi limpo com sucesso)",
+          cleaned: true
+        });
       }
 
       const player = room.players.find(p => p.userId === userId);
 
       // Se sala está em jogo, abandonar
       if (room.status === "playing") {
-        await wordsInfiniteCoopService.abandonCoopRun(room, userId);
-        
+        try {
+          await wordsInfiniteCoopService.abandonCoopRun(room, userId);
+        } catch (abandonError) {
+          console.error("Erro ao abandonar run:", abandonError);
+          // Continua mesmo com erro
+        }
+
         if (player) {
           roomSocketService.notifyPlayerAbandoned(room.roomId, {
             playerId: userId,
@@ -542,14 +612,20 @@ export class WordsInfiniteCoopController {
       }
 
       // Se sala está esperando, apenas sair
-      const updatedRoom = await wordsInfiniteRoomService.leaveRoom(userId, room.roomId);
-      
-      if (player) {
-        roomSocketService.notifyPlayerLeft(room.roomId, {
-          playerId: userId,
-          playerName: player.username,
-          remainingPlayers: updatedRoom.players.length,
-        });
+      try {
+        const updatedRoom = await wordsInfiniteRoomService.leaveRoom(userId, room.roomId);
+
+        if (player) {
+          roomSocketService.notifyPlayerLeft(room.roomId, {
+            playerId: userId,
+            playerName: player.username,
+            remainingPlayers: updatedRoom.players.length,
+          });
+        }
+      } catch (leaveError) {
+        console.error("Erro ao sair da sala:", leaveError);
+        // Força remoção direta
+        await wordsInfiniteRoomService.forceRemovePlayer(userId, room.roomId);
       }
 
       return res.status(200).json({
@@ -557,9 +633,20 @@ export class WordsInfiniteCoopController {
       });
     } catch (error: any) {
       console.error("Erro ao forçar saída:", error);
-      return res.status(error.statusCode || 500).json({
-        error: error.message || "Erro ao forçar saída",
-      });
+
+      // Mesmo com erro, tentar limpar forçadamente
+      try {
+        const userId = this.getUserId(req);
+        await wordsInfiniteRoomService.forceRemovePlayer(userId, "ANY");
+        return res.status(200).json({
+          message: "Forçado a sair (com erro, mas limpou)",
+          error: error.message,
+        });
+      } catch (finalError) {
+        return res.status(500).json({
+          error: error.message || "Erro ao forçar saída",
+        });
+      }
     }
   }
 

@@ -4,6 +4,7 @@ export interface WordsInfiniteRoomPlayer {
   userId: string;
   username: string;
   joinedAt: Date;
+  wantsRematch?: boolean; // Flag para indicar se quer jogar novamente
 }
 
 export interface WordsInfiniteRoom extends Document {

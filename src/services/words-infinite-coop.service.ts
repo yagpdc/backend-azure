@@ -31,7 +31,7 @@ export class WordsInfiniteCoopService {
 
     // Usar player 1 como "dono" do run (mas ambos jogam)
     const player1 = room.players[0];
-    
+
     // Buscar user do player1
     const user = await this.infiniteRunService["usersService"].findById(player1.userId);
     if (!user) {
@@ -170,10 +170,10 @@ export class WordsInfiniteCoopService {
       // Vitória
       result = await this.handleCoopVictory(run, room);
       isGameOver = false; // Continua para próxima palavra
-      
+
       // Incrementar contador de jogos
       await wordsInfiniteRoomService.incrementGamesPlayed(room.roomId);
-      
+
       // Próximo jogo: determinar quem começa (attempt 1 da nova palavra)
       const updatedRoom = await wordsInfiniteRoomService.getRoom(room.roomId);
       if (updatedRoom) {
@@ -189,6 +189,13 @@ export class WordsInfiniteCoopService {
       nextTurnPlayer = wordsInfiniteRoomService.getNextPlayer(room, run.attemptsUsed);
       run.currentTurnPlayerId = nextTurnPlayer;
       result = { guess, isCorrect: false, isGameOver: false };
+
+      console.log("🔄 [COOP] Calculando próximo turno:", {
+        attemptsUsed: run.attemptsUsed,
+        nextTurnPlayer,
+        currentPlayerId: userId,
+        roomPlayers: room.players.map(p => ({ userId: p.userId, username: p.username })),
+      });
     }
 
     await run.save();
