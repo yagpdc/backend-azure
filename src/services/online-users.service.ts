@@ -1,5 +1,6 @@
 import type { Server as SocketIOServer } from "socket.io";
 import type { Server as HTTPServer } from "http";
+import { roomSocketService } from "./room-socket.service";
 
 export class OnlineUsersService {
   private static instance: OnlineUsersService;
@@ -118,7 +119,7 @@ export function setupSocketIO(httpServer: HTTPServer): SocketIOServer {
         "https://projeto-front-rho.vercel.app",
         "https://words-game-five.vercel.app",
       ],
-      credentials: false,
+      credentials: true, // Permite envio de headers de autorização
     },
     pingTimeout: 20000, // Reduzido de 60s para 20s
     pingInterval: 10000, // Reduzido de 25s para 10s
@@ -126,6 +127,9 @@ export function setupSocketIO(httpServer: HTTPServer): SocketIOServer {
   });
 
   const onlineService = OnlineUsersService.getInstance();
+  
+  // Inicializar serviço de salas com Socket.IO
+  roomSocketService.setIO(io);
 
   io.on("connection", (socket) => {
     console.log(`🔌 Socket conectado: ${socket.id}`);
@@ -200,6 +204,24 @@ export function setupSocketIO(httpServer: HTTPServer): SocketIOServer {
         onlineUserIds: onlineService.getOnlineUserIds(),
         totalOnline: onlineService.getOnlineCount(),
       });
+    });
+
+    // ===== EVENTOS DE SALA =====
+
+    // Cliente entra em uma sala específica
+    socket.on("room:join", (data: { roomId: string }) => {
+      const { roomId } = data;
+      if (roomId) {
+        roomSocketService.joinRoom(socket, roomId);
+      }
+    });
+
+    // Cliente sai de uma sala
+    socket.on("room:leave", (data: { roomId: string }) => {
+      const { roomId } = data;
+      if (roomId) {
+        roomSocketService.leaveRoom(socket, roomId);
+      }
     });
   });
 

@@ -4,6 +4,7 @@ export interface InfiniteRunGuess {
   attemptNumber: number;
   guessWord: string;
   pattern: string;
+  playerId?: string; // Para modo co-op, indica qual jogador fez o palpite
   createdAt: Date;
 }
 
@@ -26,6 +27,10 @@ export interface IWordsInfiniteRun extends Document {
   usedWords: string[];
   currentGuesses: InfiniteRunGuess[];
   history: InfiniteRunHistoryEntry[];
+  // Campos para modo multiplayer
+  roomId?: string; // Se pertence a uma sala co-op/versus
+  isMultiplayer: boolean;
+  currentTurnPlayerId?: string; // ID do jogador que deve fazer o próximo palpite
   createdAt: Date;
   updatedAt: Date;
 }
@@ -35,6 +40,7 @@ const guessSchema = new Schema<InfiniteRunGuess>(
     attemptNumber: { type: Number, required: true },
     guessWord: { type: String, required: true },
     pattern: { type: String, required: true },
+    playerId: { type: String, required: false }, // Para co-op
     createdAt: { type: Date, required: true, default: () => new Date() },
   },
   { _id: false },
@@ -68,6 +74,10 @@ const wordsInfiniteRunSchema = new Schema<IWordsInfiniteRun>(
     usedWords: { type: [String], default: [] },
     currentGuesses: { type: [guessSchema], default: [] },
     history: { type: [historySchema], default: [] },
+    // Campos multiplayer
+    roomId: { type: String, required: false },
+    isMultiplayer: { type: Boolean, default: false },
+    currentTurnPlayerId: { type: String, required: false },
   },
   { timestamps: true },
 );

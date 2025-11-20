@@ -20,7 +20,7 @@ app.use(
       "https://projeto-front-rho.vercel.app",
       "https://words-game-five.vercel.app",
     ],
-    credentials: false,
+    credentials: true, // Permite envio de headers de autorização
   }),
 );
 
