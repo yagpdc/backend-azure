@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Teste Socket.IO - Status Online</title>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 30px;
+    }
+    .status {
+      padding: 15px;
+      border-radius: 5px;
+      margin: 15px 0;
+      font-weight: bold;
+    }
+    .online {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+    .offline {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+    button {
+      background: #007bff;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 5px;
+      cursor: pointer;
+      margin: 5px;
+      font-size: 14px;
+    }
+    button:hover {
+      background: #0056b3;
+    }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    .info {
+      background: #e7f3ff;
+      padding: 15px;
+      border-left: 4px solid #2196F3;
+      margin: 20px 0;
+    }
+    .user-list {
+      margin-top: 20px;
+    }
+    .user-item {
+      padding: 10px;
+      margin: 5px 0;
+      background: #f9f9f9;
+      border-left: 3px solid #28a745;
+      border-radius: 3px;
+    }
+    #logs {
+      margin-top: 20px;
+      padding: 15px;
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 5px;
+      max-height: 300px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 12px;
+    }
+    .log-entry {
+      padding: 5px 0;
+      border-bottom: 1px solid #e9ecef;
+    }
+    input {
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      width: 300px;
+      margin-right: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔌 Teste Socket.IO - Status Online</h1>
+
+    <div class="info">
+      <strong>ℹ️ Como testar:</strong>
+      <ol>
+        <li>Digite um ID de usuário (qualquer string)</li>
+        <li>Clique em "Conectar"</li>
+        <li>Abra esta página em outra aba/navegador com outro ID</li>
+        <li>Veja os usuários online sendo atualizados em tempo real!</li>
+      </ol>
+    </div>
+
+    <div style="margin: 20px 0;">
+      <input type="text" id="userId" placeholder="Digite seu User ID (ex: user123)" />
+      <button onclick="connect()" id="connectBtn">Conectar</button>
+      <button onclick="disconnect()" id="disconnectBtn" disabled>Desconectar</button>
+      <button onclick="requestUsers()" id="requestBtn" disabled>Atualizar Lista</button>
+    </div>
+
+    <div id="status" class="status offline">
+      ⚪ Desconectado
+    </div>
+
+    <div class="user-list">
+      <h3>👥 Usuários Online (<span id="onlineCount">0</span>)</h3>
+      <div id="userList"></div>
+    </div>
+
+    <div>
+      <h3>📋 Logs</h3>
+      <div id="logs"></div>
+    </div>
+  </div>
+
+  <script>
+    let socket = null;
+    let currentUserId = null;
+
+    function log(message, type = 'info') {
+      const logsDiv = document.getElementById('logs');
+      const timestamp = new Date().toLocaleTimeString();
+      const entry = document.createElement('div');
+      entry.className = 'log-entry';
+      entry.innerHTML = `<strong>[${timestamp}]</strong> ${message}`;
+      logsDiv.insertBefore(entry, logsDiv.firstChild);
+    }
+
+    function updateStatus(isOnline) {
+      const statusDiv = document.getElementById('status');
+      if (isOnline) {
+        statusDiv.className = 'status online';
+        statusDiv.innerHTML = '🟢 Online como: ' + currentUserId;
+      } else {
+        statusDiv.className = 'status offline';
+        statusDiv.innerHTML = '⚪ Desconectado';
+      }
+    }
+
+    function updateUserList(userIds) {
+      const userListDiv = document.getElementById('userList');
+      const countSpan = document.getElementById('onlineCount');
+
+      countSpan.textContent = userIds.length;
+
+      if (userIds.length === 0) {
+        userListDiv.innerHTML = '<p style="color: #999;">Nenhum usuário online</p>';
+        return;
+      }
+
+      userListDiv.innerHTML = userIds.map(userId =>
+        `<div class="user-item">
+          🟢 ${userId}${userId === currentUserId ? ' <strong>(você)</strong>' : ''}
+        </div>`
+      ).join('');
+    }
+
+    function connect() {
+      const userIdInput = document.getElementById('userId');
+      const userId = userIdInput.value.trim();
+
+      if (!userId) {
+        alert('Digite um User ID!');
+        return;
+      }
+
+      if (socket?.connected) {
+        alert('Já está conectado!');
+        return;
+      }
+
+      currentUserId = userId;
+      log(`Conectando como: ${userId}...`);
+
+      // Conectar ao servidor Socket.IO
+      socket = io('http://localhost:3000', {
+        transports: ['websocket', 'polling'],
+      });
+
+      socket.on('connect', () => {
+        log(`✅ Conectado! Socket ID: ${socket.id}`, 'success');
+        updateStatus(true);
+
+        // Informar servidor que estamos online
+        socket.emit('user:online', { userId: currentUserId });
+        log(`Enviado user:online para userId: ${currentUserId}`);
+
+        // Habilitar botões
+        document.getElementById('connectBtn').disabled = true;
+        document.getElementById('disconnectBtn').disabled = false;
+        document.getElementById('requestBtn').disabled = false;
+        userIdInput.disabled = true;
+      });
+
+      socket.on('disconnect', () => {
+        log('👋 Desconectado do servidor');
+        updateStatus(false);
+        updateUserList([]);
+
+        // Desabilitar botões
+        document.getElementById('connectBtn').disabled = false;
+        document.getElementById('disconnectBtn').disabled = true;
+        document.getElementById('requestBtn').disabled = true;
+        userIdInput.disabled = false;
+      });
+
+      socket.on('users:online', (data) => {
+        log(`📡 Recebido users:online: ${data.totalOnline} usuário(s) online`);
+        console.log('Users online:', data);
+        updateUserList(data.onlineUserIds);
+      });
+
+      socket.on('connect_error', (error) => {
+        log(`❌ Erro de conexão: ${error.message}`, 'error');
+        alert('Erro ao conectar! Certifique-se de que o servidor está rodando em http://localhost:3000');
+      });
+    }
+
+    function disconnect() {
+      if (socket) {
+        log(`Desconectando...`);
+        socket.disconnect();
+        socket = null;
+        currentUserId = null;
+      }
+    }
+
+    function requestUsers() {
+      if (socket?.connected) {
+        log('Solicitando lista de usuários online...');
+        socket.emit('users:request');
+      }
+    }
+
+    // Desconectar ao fechar a página
+    window.addEventListener('beforeunload', () => {
+      if (socket?.connected) {
+        socket.disconnect();
+      }
+    });
+
+    log('Página carregada. Digite um User ID e clique em Conectar.');
+  </script>
+</body>
+</html>

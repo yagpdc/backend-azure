@@ -22,6 +22,7 @@ import {
   WordsInfiniteRunError,
   WordsInfiniteRunService,
 } from "../services/words-infinite-run.service";
+import { OnlineUsersService } from "../services/online-users.service";
 import { isTestWordsUser } from "../utils/words-test-user";
 import {
   getWordsAvatarOptions,
@@ -363,6 +364,8 @@ export class WordsController {
   getRanking = async (_req: Request, res: Response) => {
     try {
       const players = await this.usersService.listRanking();
+      const onlineService = OnlineUsersService.getInstance();
+
       return res.json(
         players.map((player) => ({
           id: String(player._id),
@@ -371,6 +374,7 @@ export class WordsController {
           score: player.score ?? 0,
           totalTimeSpentMs: player.totalTimeSpentMs ?? 0,
           infiniteRecord: player.infiniteRecord ?? 0,
+          isOnline: onlineService.isUserOnline(String(player._id)),
           avatar: this.resolveAvatarFromConfig(
             player.config as Record<string, unknown> | undefined,
           ),
