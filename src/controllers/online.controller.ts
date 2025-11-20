@@ -4,7 +4,7 @@ import { OnlineUsersService } from "../services/online-users.service";
 export class OnlineController {
   getOnlineUsers = (_req: Request, res: Response) => {
     const onlineService = OnlineUsersService.getInstance();
-    
+
     return res.json({
       onlineUserIds: onlineService.getOnlineUserIds(),
       totalOnline: onlineService.getOnlineCount(),
@@ -15,7 +15,7 @@ export class OnlineController {
   // Em produção, usar apenas Socket.IO
   markUserOnline = (req: Request, res: Response) => {
     const { userId } = req.body;
-    
+
     if (!userId) {
       return res.status(400).json({ error: "userId é obrigatório" });
     }

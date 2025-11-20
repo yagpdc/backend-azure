@@ -5,14 +5,33 @@ export class OnlineUsersService {
   private static instance: OnlineUsersService;
   private onlineUsers: Map<string, Set<string>> = new Map(); // userId -> Set<socketId>
   private socketToUser: Map<string, string> = new Map(); // socketId -> userId
+  private lastActivity: Map<string, number> = new Map(); // userId -> timestamp
+  private cleanupInterval: NodeJS.Timeout | null = null;
 
-  private constructor() {}
+  private constructor() {
+    // Limpar usuários inativos a cada 30 segundos
+    this.startCleanupInterval();
+  }
 
   static getInstance(): OnlineUsersService {
     if (!OnlineUsersService.instance) {
       OnlineUsersService.instance = new OnlineUsersService();
     }
     return OnlineUsersService.instance;
+  }
+
+  private startCleanupInterval() {
+    // Limpar usuários que não têm conexões ativas há mais de 2 minutos
+    this.cleanupInterval = setInterval(() => {
+      const now = Date.now();
+      const timeout = 120000; // 2 minutos
+
+      for (const [userId, lastActive] of this.lastActivity.entries()) {
+        if (now - lastActive > timeout && !this.onlineUsers.has(userId)) {
+          this.lastActivity.delete(userId);
+        }
+      }
+    }, 30000); // Rodar a cada 30 segundos
   }
 
   addUser(userId: string, socketId: string): void {
@@ -24,6 +43,9 @@ export class OnlineUsersService {
 
     // Mapear socketId -> userId
     this.socketToUser.set(socketId, userId);
+
+    // Atualizar timestamp de última atividade
+    this.lastActivity.set(userId, Date.now());
   }
 
   removeUser(socketId: string): string | null {
@@ -40,6 +62,7 @@ export class OnlineUsersService {
       // Se não há mais sockets, remover usuário completamente
       if (userSockets.size === 0) {
         this.onlineUsers.delete(userId);
+        // Não remover lastActivity imediatamente - pode reconectar
       }
     }
 
@@ -47,6 +70,26 @@ export class OnlineUsersService {
     this.socketToUser.delete(socketId);
 
     return userId;
+  }
+
+  // Força remoção completa de um usuário (útil para logout)
+  forceRemoveUser(userId: string): void {
+    // Remover todos os sockets do usuário
+    const userSockets = this.onlineUsers.get(userId);
+    if (userSockets) {
+      for (const socketId of userSockets) {
+        this.socketToUser.delete(socketId);
+      }
+      this.onlineUsers.delete(userId);
+    }
+    this.lastActivity.delete(userId);
+  }
+
+  // Atualizar atividade do usuário (heartbeat)
+  updateActivity(userId: string): void {
+    if (this.onlineUsers.has(userId)) {
+      this.lastActivity.set(userId, Date.now());
+    }
   }
 
   isUserOnline(userId: string): boolean {
@@ -77,14 +120,16 @@ export function setupSocketIO(httpServer: HTTPServer): SocketIOServer {
       ],
       credentials: false,
     },
-    pingTimeout: 60000,
-    pingInterval: 25000,
+    pingTimeout: 20000, // Reduzido de 60s para 20s
+    pingInterval: 10000, // Reduzido de 25s para 10s
+    connectTimeout: 10000,
   });
 
   const onlineService = OnlineUsersService.getInstance();
 
   io.on("connection", (socket) => {
     console.log(`🔌 Socket conectado: ${socket.id}`);
+    let currentUserId: string | null = null;
 
     // Usuário se identifica ao conectar
     socket.on("user:online", (data: { userId: string }) => {
@@ -95,8 +140,11 @@ export function setupSocketIO(httpServer: HTTPServer): SocketIOServer {
         return;
       }
 
+      currentUserId = userId;
       onlineService.addUser(userId, socket.id);
-      console.log(`✅ Usuário ${userId} online (${onlineService.getConnectionCount(userId)} conexão(ões))`);
+      console.log(
+        `✅ Usuário ${userId} online (${onlineService.getConnectionCount(userId)} conexão(ões))`
+      );
 
       // Notificar todos sobre a mudança de status
       io.emit("users:online", {
@@ -105,12 +153,34 @@ export function setupSocketIO(httpServer: HTTPServer): SocketIOServer {
       });
     });
 
-    // Usuário se desconectou
+    // Heartbeat para manter atividade
+    socket.on("user:heartbeat", () => {
+      if (currentUserId) {
+        onlineService.updateActivity(currentUserId);
+      }
+    });
+
+    // Usuário explicitamente se desconectando (antes de fechar aba)
+    socket.on("user:offline", () => {
+      if (currentUserId) {
+        console.log(`👋 Usuário ${currentUserId} se desconectando explicitamente`);
+        onlineService.forceRemoveUser(currentUserId);
+
+        io.emit("users:online", {
+          onlineUserIds: onlineService.getOnlineUserIds(),
+          totalOnline: onlineService.getOnlineCount(),
+        });
+      }
+    });
+
+    // Usuário se desconectou (aba fechada, refresh, etc)
     socket.on("disconnect", () => {
       const userId = onlineService.removeUser(socket.id);
 
       if (userId) {
-        console.log(`👋 Usuário ${userId} desconectado (${onlineService.getConnectionCount(userId)} conexão(ões) restantes)`);
+        console.log(
+          `👋 Usuário ${userId} desconectado (${onlineService.getConnectionCount(userId)} conexão(ões) restantes)`
+        );
 
         // Se o usuário não tem mais conexões ativas, notificar todos
         if (!onlineService.isUserOnline(userId)) {

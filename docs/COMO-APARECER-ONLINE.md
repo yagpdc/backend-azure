@@ -34,7 +34,7 @@ class SocketService {
     }
 
     this.userId = userId;
-    
+
     // IMPORTANTE: Ajuste a URL do servidor
     this.socket = io('http://localhost:3000', {
       transports: ['websocket', 'polling'],
@@ -76,7 +76,7 @@ function App() {
   useEffect(() => {
     // Pegar userId do localStorage ou do seu sistema de auth
     const userId = localStorage.getItem('wordsUserId');
-    
+
     if (userId) {
       // Conectar ao socket
       socketService.connect(userId);
