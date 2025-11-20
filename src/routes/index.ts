@@ -3,6 +3,7 @@ import healthRoutes from "./health.routes";
 import gamesRoutes from "./games.routes";
 import cardsRoutes from "./cards.routes";
 import decksRoutes from "./decks.routes";
+import onlineRoutes from "./online.routes";
 import { HealthController } from "../controllers/health.controller";
 import wordsRoutes from "./words.routes";
 
@@ -20,5 +21,6 @@ router.use("/games", gamesRoutes);
 router.use("/cards", cardsRoutes); // /cards - Cartas fixas (53 cards)
 router.use("/decks", decksRoutes); // /decks - Decks de jogo (partidas)
 router.use("/words", wordsRoutes); // /words - Sistema Words (puzzles e histórico)
+router.use("/online", onlineRoutes); // /online - Status de usuários online
 
 export default router;
