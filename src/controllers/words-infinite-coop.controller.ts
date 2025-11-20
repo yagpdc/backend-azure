@@ -80,6 +80,12 @@ export class WordsInfiniteCoopController {
         needsPlayers: room.maxPlayers - room.players.length,
         canStart: room.players.length === room.maxPlayers,
         shareUrl: `${req.protocol}://${req.get('host')}/words/infinity/coop/join-room/${room.roomId}`,
+        // IMPORTANTE: Frontend deve fazer socket.emit('room:join', { roomId })
+        socketInstructions: {
+          event: "room:join",
+          payload: { roomId: room.roomId },
+          description: "Frontend deve emitir este evento para receber atualizações em tempo real"
+        },
         run: run ? {
           id: run._id,
           currentScore: run.currentScore,
@@ -127,6 +133,9 @@ export class WordsInfiniteCoopController {
             );
           }
         }
+
+        // Enriquecer jogadores com avatares
+        const enrichedPlayers = await this.enrichPlayersWithAvatars(existingRoom.players);
 
         return res.status(200).json({
           roomId: existingRoom.roomId,
@@ -191,7 +200,10 @@ export class WordsInfiniteCoopController {
       const userId = this.getUserId(req);
 
       const { roomId } = req.params;
+      console.log(`🚺 Usuário ${userId} tentando entrar na sala ${roomId}`);
+      
       const room = await wordsInfiniteRoomService.joinRoom(userId, roomId);
+      console.log(`✅ Usuário ${userId} entrou na sala ${roomId}. Status: ${room.status}, Players: ${room.players.length}/${room.maxPlayers}`);
 
       // Notificar outros jogadores que alguém entrou
       const joiningPlayer = room.players.find(p => p.userId === userId);
@@ -208,12 +220,14 @@ export class WordsInfiniteCoopController {
       let currentTurnPlayer = null;
 
       if (room.status === "playing") {
+        console.log(`🎮 Sala ${room.roomId} cheia! Iniciando jogo...`);
         const result = await wordsInfiniteCoopService.startCoopRun(room);
         run = result.run;
         currentTurnPlayer = result.currentTurnPlayer;
         gameStarted = true;
 
         // Notificar que o jogo começou
+        console.log(`📢 Notificando sala ${room.roomId} que o jogo começou. Turno de: ${currentTurnPlayer}`);
         roomSocketService.notifyGameStarted(room.roomId, {
           currentTurnPlayer,
           firstWord: "?????", // Esconder palavra
