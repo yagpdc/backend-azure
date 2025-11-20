@@ -121,9 +121,13 @@ export function setupSocketIO(httpServer: HTTPServer): SocketIOServer {
       ],
       credentials: true, // Permite envio de headers de autorização
     },
-    pingTimeout: 20000, // Reduzido de 60s para 20s
-    pingInterval: 10000, // Reduzido de 25s para 10s
-    connectTimeout: 10000,
+    // Configurações otimizadas para Azure App Service
+    transports: ["polling"], // Apenas polling (mais confiável no Azure)
+    pingTimeout: 60000, // Aumentado para conexões mais lentas
+    pingInterval: 25000,
+    connectTimeout: 45000,
+    // Permitir conexões de qualquer origem (Azure usa proxy reverso)
+    allowEIO3: true,
   });
 
   const onlineService = OnlineUsersService.getInstance();
