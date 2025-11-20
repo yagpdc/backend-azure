@@ -20,7 +20,11 @@
     "start": "node dist/server.js",
     "words:import": "tsx scripts/words-import.ts",
     "words:seed-user": "tsx scripts/words-seed-user.ts",
-    "words:reset-progress": "tsx scripts/words-reset-progress.ts"
+    "words:reset-progress": "tsx scripts/words-reset-progress.ts",
+    "words:validate": "tsx scripts/words-validate-consistency.ts",
+    "words:add-word": "tsx scripts/words-add-word.ts",
+    "words:find-english": "tsx scripts/words-find-english.ts",
+    "words:remove-words": "tsx scripts/words-remove-words.ts"
   },
   "keywords": [],
   "author": "",

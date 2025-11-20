@@ -63,6 +63,7 @@ export class WordsUsersService {
         updatedAt: 1,
         totalTimeSpentMs: 1,
         config: 1,
+        infiniteRecord: 1,
       })
       .lean();
   }

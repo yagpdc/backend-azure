@@ -15,6 +15,10 @@ export const CreateWordsUserDtoSchema = z.object({
 
 export type CreateWordsUserDto = z.infer<typeof CreateWordsUserDtoSchema>;
 
+export interface WordsAchievements {
+  "30_STREAK_INFINITY": boolean;
+}
+
 export interface IWordsUser extends Document {
   name: string;
   streak: number;
@@ -24,6 +28,7 @@ export interface IWordsUser extends Document {
   infiniteCurrentScore: number;
   infiniteRecord: number;
   infiniteStatus: "idle" | "active" | "failed" | "completed";
+  achievements: WordsAchievements;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -42,6 +47,10 @@ const wordsUserSchema = new Schema<IWordsUser>(
       required: true,
       enum: ["idle", "active", "failed", "completed"],
       default: "idle",
+    },
+    achievements: {
+      type: Schema.Types.Mixed,
+      default: () => ({ "30_STREAK_INFINITY": false }),
     },
   },
   {

@@ -102,15 +102,20 @@ export class WordsInfiniteRunService {
     });
 
     let updatedUser: IWordsUser | null = null;
+    let unlockedAchievements: string[] = [];
 
     if (evaluation.isCorrect) {
-      updatedUser = await this.handleVictory(user, run);
+      const result = await this.handleVictory(user, run);
+      updatedUser = result.user;
+      unlockedAchievements = result.unlockedAchievements;
     } else if (run.attemptsUsed >= run.maxAttempts) {
-      updatedUser = await this.handleFailure(user, run);
+      const result = await this.handleFailure(user, run);
+      updatedUser = result.user;
+      unlockedAchievements = result.unlockedAchievements;
     }
 
     await run.save();
-    return this.wrapResult(run, updatedUser ?? user);
+    return this.wrapResult(run, updatedUser ?? user, unlockedAchievements);
   }
 
   async abandonRun(user: IWordsUser) {
@@ -188,31 +193,46 @@ export class WordsInfiniteRunService {
     run.currentGuesses = [];
     run.attemptsUsed = 0;
 
-    const record = Math.max(user.infiniteRecord ?? 0, run.currentScore);
+    const oldRecord = user.infiniteRecord ?? 0;
+    const record = Math.max(oldRecord, run.currentScore);
+    const unlockedAchievements = this.checkUnlockedAchievements(
+      oldRecord,
+      record,
+    );
     const nextWord = await this.pickNextWord(new Set(run.usedWords));
 
     if (nextWord) {
       run.nextWord = nextWord;
       run.status = "active";
-      return (
-        (await this.usersService.updateInfiniteProgress(user.id, {
+      const updatedUser = await this.usersService.updateInfiniteProgress(
+        user.id,
+        {
           status: "active",
           currentScore: run.currentScore,
           record,
-        })) ?? user
+        },
       );
+      return {
+        user: updatedUser ?? user,
+        unlockedAchievements,
+      };
     }
 
     run.nextWord = null;
     run.status = "completed";
 
-    return (
-      (await this.usersService.updateInfiniteProgress(user.id, {
+    const updatedUser = await this.usersService.updateInfiniteProgress(
+      user.id,
+      {
         status: "completed",
         currentScore: 0,
         record,
-      })) ?? user
+      },
     );
+    return {
+      user: updatedUser ?? user,
+      unlockedAchievements,
+    };
   }
 
   private async handleFailure(user: IWordsUser, run: IWordsInfiniteRun) {
@@ -234,15 +254,25 @@ export class WordsInfiniteRunService {
     run.nextWord = null;
     run.attemptsUsed = 0;
 
-    const record = Math.max(user.infiniteRecord ?? 0, run.currentScore ?? 0);
+    const oldRecord = user.infiniteRecord ?? 0;
+    const record = Math.max(oldRecord, run.currentScore ?? 0);
+    const unlockedAchievements = this.checkUnlockedAchievements(
+      oldRecord,
+      record,
+    );
 
-    return (
-      (await this.usersService.updateInfiniteProgress(user.id, {
+    const updatedUser = await this.usersService.updateInfiniteProgress(
+      user.id,
+      {
         status: "failed",
         currentScore: 0,
         record,
-      })) ?? user
+      },
     );
+    return {
+      user: updatedUser ?? user,
+      unlockedAchievements,
+    };
   }
 
   private pushHistoryEntry(
@@ -295,9 +325,27 @@ export class WordsInfiniteRunService {
     return this.wordPool;
   }
 
-  private async wrapResult(run: IWordsInfiniteRun, user: IWordsUser) {
+  private async wrapResult(
+    run: IWordsInfiniteRun,
+    user: IWordsUser,
+    unlockedAchievements: string[] = [],
+  ) {
     const totalWords = (await this.ensureWordPool()).length;
-    return { run, user, totalWords };
+    return { run, user, totalWords, unlockedAchievements };
+  }
+
+  private checkUnlockedAchievements(
+    oldRecord: number,
+    newRecord: number,
+  ): string[] {
+    const unlocked: string[] = [];
+
+    // Check 30_STREAK_INFINITY achievement
+    if (oldRecord < 30 && newRecord >= 30) {
+      unlocked.push("30_STREAK_INFINITY");
+    }
+
+    return unlocked;
   }
 
   private findActiveRun(user: IWordsUser) {

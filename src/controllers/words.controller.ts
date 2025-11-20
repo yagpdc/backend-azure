@@ -93,7 +93,10 @@ export class WordsController {
         page,
         pageSize,
       });
-      return res.json(history);
+      return res.json({
+        ...history,
+        infiniteRecord: req.wordsUser?.infiniteRecord ?? 0,
+      });
     } catch (error: any) {
       if (error instanceof WordsDailyGameError) {
         return res.status(error.statusCode).json({ error: error.message });
@@ -290,9 +293,10 @@ export class WordsController {
     try {
       const result = await this.infiniteRunService.startRun(req.wordsUser!);
       req.wordsUser = result.user;
-      return res.json(
-        this.mapInfiniteRun(result.run, result.totalWords, result.user),
-      );
+      return res.json({
+        ...this.mapInfiniteRun(result.run, result.totalWords, result.user),
+        unlockedAchievements: result.unlockedAchievements ?? [],
+      });
     } catch (error: any) {
       return this.handleInfiniteError(res, error);
     }
@@ -301,9 +305,10 @@ export class WordsController {
   getInfiniteRunStatus = async (req: Request, res: Response) => {
     try {
       const result = await this.infiniteRunService.getRun(req.wordsUser!);
-      return res.json(
-        this.mapInfiniteRun(result.run, result.totalWords, result.user),
-      );
+      return res.json({
+        ...this.mapInfiniteRun(result.run, result.totalWords, result.user),
+        unlockedAchievements: result.unlockedAchievements ?? [],
+      });
     } catch (error: any) {
       return this.handleInfiniteError(res, error);
     }
@@ -321,9 +326,10 @@ export class WordsController {
         validation.data.guessWord,
       );
       req.wordsUser = result.user;
-      return res.json(
-        this.mapInfiniteRun(result.run, result.totalWords, result.user),
-      );
+      return res.json({
+        ...this.mapInfiniteRun(result.run, result.totalWords, result.user),
+        unlockedAchievements: result.unlockedAchievements ?? [],
+      });
     } catch (error: any) {
       return this.handleInfiniteError(res, error);
     }
@@ -333,9 +339,10 @@ export class WordsController {
     try {
       const result = await this.infiniteRunService.abandonRun(req.wordsUser!);
       req.wordsUser = result.user;
-      return res.json(
-        this.mapInfiniteRun(result.run, result.totalWords, result.user),
-      );
+      return res.json({
+        ...this.mapInfiniteRun(result.run, result.totalWords, result.user),
+        unlockedAchievements: result.unlockedAchievements ?? [],
+      });
     } catch (error: any) {
       return this.handleInfiniteError(res, error);
     }
@@ -363,6 +370,7 @@ export class WordsController {
           streak: player.streak ?? 0,
           score: player.score ?? 0,
           totalTimeSpentMs: player.totalTimeSpentMs ?? 0,
+          infiniteRecord: player.infiniteRecord ?? 0,
           avatar: this.resolveAvatarFromConfig(
             player.config as Record<string, unknown> | undefined,
           ),
@@ -455,9 +463,17 @@ export class WordsController {
         currentScore: user.infiniteCurrentScore ?? 0,
         record: user.infiniteRecord ?? 0,
       },
+      achievements: this.calculateAchievements(user),
       config: this.buildUserConfig(user),
       createdAt: user.createdAt.toISOString(),
       updatedAt: user.updatedAt.toISOString(),
+    };
+  }
+
+  private calculateAchievements(user: IWordsUser) {
+    const infiniteRecord = user.infiniteRecord ?? 0;
+    return {
+      "30_STREAK_INFINITY": infiniteRecord >= 30,
     };
   }
 
