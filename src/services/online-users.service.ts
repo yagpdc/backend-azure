@@ -119,15 +119,11 @@ export function setupSocketIO(httpServer: HTTPServer): SocketIOServer {
         "https://projeto-front-rho.vercel.app",
         "https://words-game-five.vercel.app",
       ],
-      credentials: true, // Permite envio de headers de autorização
+      credentials: true,
     },
-    // Configurações otimizadas para Azure App Service
-    transports: ["polling"], // Apenas polling (mais confiável no Azure)
-    pingTimeout: 60000, // Aumentado para conexões mais lentas
-    pingInterval: 25000,
-    connectTimeout: 45000,
-    // Permitir conexões de qualquer origem (Azure usa proxy reverso)
-    allowEIO3: true,
+    pingTimeout: 20000,
+    pingInterval: 10000,
+    connectTimeout: 10000,
   });
 
   const onlineService = OnlineUsersService.getInstance();
