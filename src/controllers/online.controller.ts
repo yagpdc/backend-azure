@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { OnlineUsersService } from "../services/online-users.service";
+import { WordsUsersService } from "../services/words-users.service";
 
 export class OnlineController {
   getOnlineUsers = (_req: Request, res: Response) => {
@@ -13,7 +14,7 @@ export class OnlineController {
 
   // Endpoint temporário para marcar usuário como online via HTTP (para debug)
   // Em produção, usar apenas Socket.IO
-  markUserOnline = (req: Request, res: Response) => {
+  markUserOnline = async (req: Request, res: Response) => {
     const { userId } = req.body;
 
     if (!userId) {
@@ -25,9 +26,20 @@ export class OnlineController {
     const onlineService = OnlineUsersService.getInstance();
     onlineService.addUser(userId, fakeSocketId);
 
+    // Try to resolve user's name
+    const usersService = new WordsUsersService();
+    let name = userId;
+    try {
+      const user = await usersService.findById(userId);
+      if (user && (user as any).name) name = (user as any).name;
+    } catch (_) {
+      // ignore and fallback to id
+    }
+
     return res.json({
       message: "Usuário marcado como online (simulado)",
       userId,
+      name,
       isOnline: onlineService.isUserOnline(userId),
       totalOnline: onlineService.getOnlineCount(),
     });

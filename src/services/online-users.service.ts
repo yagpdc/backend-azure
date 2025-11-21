@@ -1,6 +1,7 @@
 import type { Server as SocketIOServer } from "socket.io";
 import type { Server as HTTPServer } from "http";
 import { roomSocketService } from "./room-socket.service";
+import { WordsUsersService } from "./words-users.service";
 
 export class OnlineUsersService {
   private static instance: OnlineUsersService;
@@ -128,6 +129,41 @@ export function setupSocketIO(httpServer: HTTPServer): SocketIOServer {
   });
 
   const onlineService = OnlineUsersService.getInstance();
+  const usersService = new WordsUsersService();
+
+  // Helper to emit users:online including both ids and names for compatibility
+  async function emitUsersOnline() {
+    try {
+      const ids = onlineService.getOnlineUserIds();
+      const total = onlineService.getOnlineCount();
+
+      // Resolve names in parallel (fall back to id if not found)
+      const lookups = await Promise.all(
+        ids.map(async (id) => {
+          try {
+            const user = await usersService.findById(id);
+            const name = user && (user as any).name ? (user as any).name : id;
+            return { id, name };
+          } catch (err) {
+            return { id, name: id };
+          }
+        }),
+      );
+
+      io.emit("users:online", {
+        onlineUsers: lookups,
+        onlineUserIds: ids,
+        totalOnline: total,
+      });
+    } catch (err) {
+      console.error("Erro ao emitir users:online com nomes", err);
+      // Fallback: emit ids only
+      io.emit("users:online", {
+        onlineUserIds: onlineService.getOnlineUserIds(),
+        totalOnline: onlineService.getOnlineCount(),
+      });
+    }
+  }
 
   // Inicializar serviço de salas com Socket.IO
   roomSocketService.setIO(io);
@@ -146,11 +182,8 @@ export function setupSocketIO(httpServer: HTTPServer): SocketIOServer {
         `✅ Usuário ${currentUserId} conectado automaticamente (${onlineService.getConnectionCount(currentUserId)} conexão(ões))`
       );
 
-      // Notificar todos sobre a mudança de status
-      io.emit("users:online", {
-        onlineUserIds: onlineService.getOnlineUserIds(),
-        totalOnline: onlineService.getOnlineCount(),
-      });
+      // Notificar todos sobre a mudança de status (com nomes)
+      void emitUsersOnline();
     }
 
     // Usuário se identifica ao conectar
@@ -168,11 +201,8 @@ export function setupSocketIO(httpServer: HTTPServer): SocketIOServer {
         `✅ Usuário ${userId} online (${onlineService.getConnectionCount(userId)} conexão(ões))`
       );
 
-      // Notificar todos sobre a mudança de status
-      io.emit("users:online", {
-        onlineUserIds: onlineService.getOnlineUserIds(),
-        totalOnline: onlineService.getOnlineCount(),
-      });
+      // Notificar todos sobre a mudança de status (com nomes)
+      void emitUsersOnline();
     });
 
     // Heartbeat para manter atividade
@@ -188,10 +218,8 @@ export function setupSocketIO(httpServer: HTTPServer): SocketIOServer {
         console.log(`👋 Usuário ${currentUserId} se desconectando explicitamente`);
         onlineService.forceRemoveUser(currentUserId);
 
-        io.emit("users:online", {
-          onlineUserIds: onlineService.getOnlineUserIds(),
-          totalOnline: onlineService.getOnlineCount(),
-        });
+        // Emitir atualização (com nomes)
+        void emitUsersOnline();
       }
     });
 
@@ -206,10 +234,8 @@ export function setupSocketIO(httpServer: HTTPServer): SocketIOServer {
 
         // Se o usuário não tem mais conexões ativas, notificar todos
         if (!onlineService.isUserOnline(userId)) {
-          io.emit("users:online", {
-            onlineUserIds: onlineService.getOnlineUserIds(),
-            totalOnline: onlineService.getOnlineCount(),
-          });
+          // Emitir atualização (com nomes)
+          void emitUsersOnline();
         }
       }
 
@@ -217,11 +243,22 @@ export function setupSocketIO(httpServer: HTTPServer): SocketIOServer {
     });
 
     // Permitir que cliente solicite lista de usuários online
-    socket.on("users:request", () => {
-      socket.emit("users:online", {
-        onlineUserIds: onlineService.getOnlineUserIds(),
-        totalOnline: onlineService.getOnlineCount(),
-      });
+    socket.on("users:request", async () => {
+      // Cliente pediu a lista; responder com nomes quando possível
+      const ids = onlineService.getOnlineUserIds();
+      const total = onlineService.getOnlineCount();
+      try {
+        const lookups = await Promise.all(
+          ids.map(async (id) => {
+            const user = await usersService.findById(id);
+            const name = user && (user as any).name ? (user as any).name : id;
+            return { id, name };
+          }),
+        );
+        socket.emit("users:online", { onlineUsers: lookups, onlineUserIds: ids, totalOnline: total });
+      } catch (err) {
+        socket.emit("users:online", { onlineUserIds: ids, totalOnline: total });
+      }
     });
 
     // ===== EVENTOS DE SALA =====
