@@ -9,6 +9,7 @@ import wordsRoutes from "./words.routes";
 
 const router = Router();
 import debug from "./debug";
+import authRoutes from "./auth.routes";
 
 router.use(debug);
 // Rota raiz (/)
@@ -22,5 +23,6 @@ router.use("/cards", cardsRoutes); // /cards - Cartas fixas (53 cards)
 router.use("/decks", decksRoutes); // /decks - Decks de jogo (partidas)
 router.use("/words", wordsRoutes); // /words - Sistema Words (puzzles e histórico)
 router.use("/online", onlineRoutes); // /online - Status de usuários online
+router.use('/auth', authRoutes);
 
 export default router;

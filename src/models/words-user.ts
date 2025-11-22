@@ -21,6 +21,7 @@ export interface WordsAchievements {
 
 export interface IWordsUser extends Document {
   name: string;
+  passwordHash?: string | null;
   streak: number;
   score: number;
   totalTimeSpentMs: number;
@@ -36,6 +37,7 @@ export interface IWordsUser extends Document {
 const wordsUserSchema = new Schema<IWordsUser>(
   {
     name: { type: String, required: true, trim: true },
+    passwordHash: { type: String, required: false, select: false },
     streak: { type: Number, required: true, default: 0 },
     score: { type: Number, required: true, default: 0 },
     totalTimeSpentMs: { type: Number, required: true, default: 0 },
