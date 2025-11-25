@@ -12,7 +12,7 @@ app.use(helmet());
 app.use(compression());
 app.use(express.json());
 
-app.use(
+app.use(  
   cors({
     origin: [
       "https://www.froggo.com.br",

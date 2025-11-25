@@ -22,6 +22,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
+    "postinstall": "npm run build",
     "start": "node dist/server.js",
     "words:import": "tsx scripts/words-import.ts",
     "words:seed-user": "tsx scripts/words-seed-user.ts",
